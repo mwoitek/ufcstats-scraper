@@ -1,3 +1,6 @@
+import json
+import os
+from pathlib import Path
 from typing import cast
 
 import requests
@@ -117,3 +120,14 @@ class FightersListScraper:
 
         self.scraped_data = scraped_data
         return self.scraped_data
+
+    def save_json(self) -> None:
+        if self.failed or not hasattr(self, "scraped_data"):
+            return
+
+        data_dir = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
+        if not (data_dir.exists() and data_dir.is_dir() and os.access(data_dir, os.W_OK)):
+            return
+
+        with open(data_dir / f"{self.first_letter}.json", mode="w") as out_file:
+            json.dump(self.scraped_data, out_file, indent=2)
