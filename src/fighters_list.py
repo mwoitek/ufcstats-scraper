@@ -81,7 +81,7 @@ class FightersListScraper:
 
         # scrape all other fields except for currentChampion
         cells_text = map(
-            lambda c: c.get_text().replace("-", "").replace(".", "").strip(),
+            lambda c: c.get_text().strip().strip("-").rstrip("."),
             cells[:-1],
         )
         data_dict.update(zip(FIELD_NAMES[1:-1], cells_text))
