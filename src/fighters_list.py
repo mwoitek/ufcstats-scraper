@@ -50,14 +50,13 @@ class FightersListScraper:
             self.failed = True
             return
 
-        rows_set = table_body.find_all("tr")
-        table_rows = [r for r in rows_set if isinstance(r, Tag)]
-
-        if len(table_rows) == 0:
+        rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
+        if len(rows) == 0:
             self.failed = True
             return
 
-        return table_rows
+        self.rows = rows
+        return self.rows
 
     def scrape_row(self, row: Tag) -> dict[str, str | int | bool] | None:
         cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
