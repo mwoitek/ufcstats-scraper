@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from sys import exit
 from typing import cast
 
 import requests
@@ -131,3 +132,23 @@ class FightersListScraper:
 
         with open(data_dir / f"{self.first_letter}.json", mode="w") as out_file:
             json.dump(self.scraped_data, out_file, indent=2)
+
+
+if __name__ == "__main__":
+    # this is how this class is supposed to be used:
+
+    first_letter = "v"
+    scraper = FightersListScraper(first_letter)
+
+    print(f"Scraping fighter data for letter {first_letter.upper()}...")
+    scraper.scrape()
+
+    if scraper.failed:
+        print("Something went wrong! No data scraped.")
+        exit(1)
+
+    print(f"Success! Scraped data for {len(scraper.scraped_data)} fighters.")
+
+    print("Saving to JSON...")
+    scraper.save_json()
+    print("Done!")
