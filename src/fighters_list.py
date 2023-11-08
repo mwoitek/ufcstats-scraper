@@ -20,6 +20,8 @@ FIELD_NAMES = [
     "currentChampion",
 ]
 
+DataDict = dict[str, str | int | bool]
+
 
 class FightersListScraper:
     def __init__(self, first_letter: str) -> None:
@@ -58,7 +60,7 @@ class FightersListScraper:
         self.rows = rows
         return self.rows
 
-    def scrape_row(self, row: Tag) -> dict[str, str | int | bool] | None:
+    def scrape_row(self, row: Tag) -> DataDict | None:
         cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cells) != len(FIELD_NAMES) - 1:
             return
@@ -98,3 +100,20 @@ class FightersListScraper:
                 del data_dict[field]
 
         return data_dict if len(data_dict) > 1 else None
+
+    def scrape(self) -> list[DataDict] | None:
+        self.get_soup()
+        self.get_table_rows()
+
+        if self.failed:
+            return
+
+        data_iter = map(lambda r: self.scrape_row(r), self.rows)
+        scraped_data = [d for d in data_iter if d is not None]
+
+        if len(scraped_data) == 0:
+            self.failed = True
+            return
+
+        self.scraped_data = scraped_data
+        return self.scraped_data
