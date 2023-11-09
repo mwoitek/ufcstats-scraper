@@ -62,7 +62,8 @@ class FighterDetailsScraper:
                 record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
                 data_dict.update(record_dict)
 
-        return data_dict if len(data_dict) > 0 else None
+        self.header_data = data_dict if len(data_dict) > 0 else None
+        return self.header_data
 
     def scrape_personal_info(self) -> dict[str, str] | None:
         if not hasattr(self, "soup"):
@@ -89,7 +90,8 @@ class FighterDetailsScraper:
             data_dict["dateOfBirth"] = datetime.strptime(data_dict["dob"], "%b %d, %Y").strftime("%Y-%m-%d")
             del data_dict["dob"]
 
-        return data_dict if len(data_dict) > 0 else None
+        self.personal_info = data_dict if len(data_dict) > 0 else None
+        return self.personal_info
 
     def scrape_career_stats(self) -> dict[str, int | float] | None:
         if not hasattr(self, "soup"):
@@ -127,4 +129,5 @@ class FighterDetailsScraper:
             except ValueError:
                 continue
 
-        return data_dict if len(data_dict) > 0 else None
+        self.career_stats = data_dict if len(data_dict) > 0 else None
+        return self.career_stats
