@@ -7,6 +7,15 @@ from bs4 import Tag
 
 RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
 
+INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
+FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
+
+
+# Not a general solution. Works in this case, though.
+def to_camel_case(s: str) -> str:
+    parts = s.lower().replace(".", "").split(" ")
+    return parts[0] if len(parts) == 1 else parts[0] + "".join(p.capitalize() for p in parts[1:])
+
 
 class FighterDetailsScraper:
     def __init__(self, link: str) -> None:
@@ -79,5 +88,43 @@ class FighterDetailsScraper:
         if "dob" in data_dict:
             data_dict["dateOfBirth"] = datetime.strptime(data_dict["dob"], "%b %d, %Y").strftime("%Y-%m-%d")
             del data_dict["dob"]
+
+        return data_dict if len(data_dict) > 0 else None
+
+    def scrape_career_stats(self) -> dict[str, int | float] | None:
+        if not hasattr(self, "soup"):
+            return
+
+        box = self.soup.find("div", class_="b-list__info-box-left")
+        if not isinstance(box, Tag):
+            return
+
+        items = [li for li in box.find_all("li") if isinstance(li, Tag)]
+        raw_data: dict[str, str] = {}
+
+        for item in items:
+            text = re.sub(r"\s+", " ", item.get_text()).strip()
+            if text == "":
+                continue
+
+            field_name, field_value = text.split(": ")
+            raw_data[to_camel_case(field_name)] = field_value
+
+        if len(raw_data) != 8:
+            return
+
+        data_dict: dict[str, int | float] = {}
+
+        for field_name in INT_STATS:
+            try:
+                data_dict[field_name] = int(raw_data[field_name].rstrip("%"))
+            except ValueError:
+                continue
+
+        for field_name in FLOAT_STATS:
+            try:
+                data_dict[field_name] = float(raw_data[field_name])
+            except ValueError:
+                continue
 
         return data_dict if len(data_dict) > 0 else None
