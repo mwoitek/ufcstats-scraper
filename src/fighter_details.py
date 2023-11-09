@@ -5,13 +5,6 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 
-RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
-
-INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
-FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
-
-SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
-
 
 # Not a general solution. Works in this case, though.
 def to_camel_case(s: str) -> str:
@@ -20,6 +13,13 @@ def to_camel_case(s: str) -> str:
 
 
 class FighterDetailsScraper:
+    RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
+
+    INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
+    FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
+
+    SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
+
     def __init__(self, link: str) -> None:
         self.link = link
         self.failed = False
@@ -58,7 +58,7 @@ class FighterDetailsScraper:
 
         if isinstance(record_span, Tag):
             record_str = record_span.get_text().strip()
-            match = re.match(RECORD_PATTERN, record_str, flags=re.IGNORECASE)
+            match = re.match(FighterDetailsScraper.RECORD_PATTERN, record_str, flags=re.IGNORECASE)
 
             if isinstance(match, re.Match):
                 record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
@@ -119,13 +119,13 @@ class FighterDetailsScraper:
 
         data_dict: dict[str, int | float] = {}
 
-        for field_name in INT_STATS:
+        for field_name in FighterDetailsScraper.INT_STATS:
             try:
                 data_dict[field_name] = int(raw_data[field_name].rstrip("%"))
             except ValueError:
                 continue
 
-        for field_name in FLOAT_STATS:
+        for field_name in FighterDetailsScraper.FLOAT_STATS:
             try:
                 data_dict[field_name] = float(raw_data[field_name])
             except ValueError:
@@ -141,7 +141,11 @@ class FighterDetailsScraper:
         self.scrape_personal_info()
         self.scrape_career_stats()
 
-        valid_attrs = [a for a in SCRAPER_ATTRS if hasattr(self, a) and getattr(self, a) is not None]
+        valid_attrs = [
+            a
+            for a in FighterDetailsScraper.SCRAPER_ATTRS
+            if hasattr(self, a) and getattr(self, a) is not None
+        ]
 
         if len(valid_attrs) == 0:
             self.failed = True
