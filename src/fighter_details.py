@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime
 
@@ -155,3 +156,10 @@ class FighterDetailsScraper:
         for attr in valid_attrs:
             self.scraped_data.update(getattr(self, attr))
         return self.scraped_data
+
+    # This method isn't really necessary. But it is useful for inspecting the
+    # results of `scrape`.
+    def to_json(self) -> str | None:
+        if not hasattr(self, "scraped_data"):
+            return
+        return json.dumps(self.scraped_data, indent=2)
