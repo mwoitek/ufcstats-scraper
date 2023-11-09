@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -51,5 +52,32 @@ class FighterDetailsScraper:
             if isinstance(match, re.Match):
                 record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
                 data_dict.update(record_dict)
+
+        return data_dict if len(data_dict) > 0 else None
+
+    def scrape_personal_info(self) -> dict[str, str] | None:
+        if not hasattr(self, "soup"):
+            return
+
+        box_list = self.soup.find("ul", class_="b-list__box-list")
+        if not isinstance(box_list, Tag):
+            return
+
+        items = [li for li in box_list.find_all("li") if isinstance(li, Tag)]
+        if len(items) != 5:
+            return
+
+        data_dict: dict[str, str] = {}
+
+        for item in items:
+            text = re.sub(r"\s+", " ", item.get_text())
+            field_name, field_value = [p.strip().strip("-").rstrip(".") for p in text.split(": ")]
+            if field_value != "":
+                data_dict[field_name.lower()] = field_value
+
+        # fix date of birth if necessary
+        if "dob" in data_dict:
+            data_dict["dateOfBirth"] = datetime.strptime(data_dict["dob"], "%b %d, %Y").strftime("%Y-%m-%d")
+            del data_dict["dob"]
 
         return data_dict if len(data_dict) > 0 else None
