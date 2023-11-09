@@ -10,6 +10,8 @@ RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<n
 INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
 FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
 
+SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
+
 
 # Not a general solution. Works in this case, though.
 def to_camel_case(s: str) -> str:
@@ -131,3 +133,21 @@ class FighterDetailsScraper:
 
         self.career_stats = data_dict if len(data_dict) > 0 else None
         return self.career_stats
+
+    def scrape(self) -> dict[str, str | int | float] | None:
+        self.get_soup()
+
+        self.scrape_header()
+        self.scrape_personal_info()
+        self.scrape_career_stats()
+
+        valid_attrs = [a for a in SCRAPER_ATTRS if hasattr(self, a) and getattr(self, a) is not None]
+
+        if len(valid_attrs) == 0:
+            self.failed = True
+            return
+
+        self.scraped_data: dict[str, str | int | float] = {}
+        for attr in valid_attrs:
+            self.scraped_data.update(getattr(self, attr))
+        return self.scraped_data
