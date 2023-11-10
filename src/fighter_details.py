@@ -1,6 +1,8 @@
 import json
+import os
 import re
 from datetime import datetime
+from pathlib import Path
 from sys import exit
 
 import requests
@@ -186,6 +188,22 @@ class FighterDetailsScraper:
         if not hasattr(self, "scraped_data"):
             return
         return json.dumps(self.scraped_data, indent=2)
+
+
+def read_links(first_letter: str) -> list[str] | None:
+    links_dir = Path(__file__).resolve().parents[1] / "data" / "links" / "fighters"
+    if not (links_dir.exists() and links_dir.is_dir() and os.access(links_dir, os.R_OK)):
+        return
+
+    in_file = links_dir / f"{first_letter}.txt"
+    if not (in_file.exists() and in_file.is_file() and os.access(in_file, os.R_OK)):
+        return
+
+    links: list[str] = []
+    with open(in_file, mode="r") as links_file:
+        links = [line.strip() for line in links_file]
+    links = [link for link in links if link != ""]
+    return links if len(links) > 0 else None
 
 
 if __name__ == "__main__":
