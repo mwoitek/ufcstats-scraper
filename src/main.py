@@ -1,3 +1,5 @@
+import json
+import os
 from enum import Enum
 from string import ascii_lowercase
 from sys import argv
@@ -11,6 +13,25 @@ class ExitCode(Enum):
     SUCCESS = 0
     PARTIAL_SUCCESS = 1
     ERROR = 2
+
+
+def save_links(first_letter: str) -> None:
+    in_file = FightersListScraper.DATA_DIR / f"{first_letter}.json"
+    if not (in_file.exists() and in_file.is_file() and os.access(in_file, os.R_OK)):
+        return
+
+    links_dir = FightersListScraper.DATA_DIR.parent / "links" / "fighters"
+    if not (links_dir.exists() and links_dir.is_dir() and os.access(links_dir, os.W_OK)):
+        return
+
+    links: list[str] = []
+    with open(in_file, mode="r") as json_file:
+        links = json.load(json_file, object_hook=lambda d: d.get("link", ""))
+
+    lines = [f"{link}\n" for link in links if link != ""]
+    out_file = links_dir / f"{first_letter}.txt"
+    with open(out_file, mode="w") as links_file:
+        links_file.writelines(lines)
 
 
 def scrape_fighters_list(*, letters: str = ascii_lowercase, delay: int = 10) -> ExitCode:
@@ -43,6 +64,10 @@ def scrape_fighters_list(*, letters: str = ascii_lowercase, delay: int = 10) -> 
 
         print("Saving to JSON...", end=" ")
         scraper.save_json()
+        print("Done!")
+
+        print("Saving scraped links...", end=" ")
+        save_links(letter)
         print("Done!")
 
         if i < len(letters):
