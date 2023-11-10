@@ -48,7 +48,7 @@ class FightersListScraper:
         return self.soup
 
     def get_table_rows(self) -> list[Tag] | None:
-        if self.failed:
+        if not hasattr(self, "soup"):
             return
 
         table_body = self.soup.find("tbody")
@@ -109,7 +109,7 @@ class FightersListScraper:
         self.get_soup()
         self.get_table_rows()
 
-        if self.failed:
+        if not hasattr(self, "rows"):
             return
 
         data_iter = map(lambda r: self.scrape_row(r), self.rows)
@@ -123,7 +123,7 @@ class FightersListScraper:
         return self.scraped_data
 
     def save_json(self) -> None:
-        if self.failed or not hasattr(self, "scraped_data"):
+        if not hasattr(self, "scraped_data"):
             return
 
         data_dir = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
