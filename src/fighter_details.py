@@ -15,6 +15,23 @@ def to_camel_case(s: str) -> str:
 
 
 class FighterDetailsScraper:
+    """
+    EXAMPLE USAGE:
+
+    link = "http://ufcstats.com/fighter-details/a1f6999fe57236e0"  # Wanderlei Silva
+    scraper = FighterDetailsScraper(link)
+
+    print(f"Scraping fighter details from {link}...")
+    scraper.scrape()
+
+    if scraper.failed:
+        print("Something went wrong! No data was scraped.")
+        exit(1)
+
+    print("Success! Here's the fighter data:")
+    print(scraper.get_json())
+    """
+
     RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
 
     INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
@@ -172,16 +189,5 @@ class FighterDetailsScraper:
 
 
 if __name__ == "__main__":
-    # example usage
-    link = "http://ufcstats.com/fighter-details/a1f6999fe57236e0"  # Wanderlei Silva
-    scraper = FighterDetailsScraper(link)
-
-    print(f"Scraping fighter details from {link}...")
-    scraper.scrape()
-
-    if scraper.failed:
-        print("Something went wrong! No data was scraped.")
-        exit(1)
-
-    print("Success! Here's the fighter data:")
-    print(scraper.get_json())
+    # TODO
+    pass
