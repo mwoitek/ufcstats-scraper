@@ -8,26 +8,27 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 
-BASE_URL = "http://www.ufcstats.com/statistics/fighters"
-FIELD_NAMES = [
-    "link",
-    "firstName",
-    "lastName",
-    "nickname",
-    "height",
-    "weight",
-    "reach",
-    "stance",
-    "wins",
-    "losses",
-    "draws",
-    "currentChampion",
-]
-
 DataDict = dict[str, str | int | bool]
 
 
 class FightersListScraper:
+    BASE_URL = "http://www.ufcstats.com/statistics/fighters"
+    FIELD_NAMES = [
+        "link",
+        "firstName",
+        "lastName",
+        "nickname",
+        "height",
+        "weight",
+        "reach",
+        "stance",
+        "wins",
+        "losses",
+        "draws",
+        "currentChampion",
+    ]
+    DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
+
     def __init__(self, first_letter: str) -> None:
         self.first_letter = first_letter
         self.failed = False
@@ -37,7 +38,7 @@ class FightersListScraper:
             "char": self.first_letter,
             "page": "all",
         }
-        response = requests.get(BASE_URL, params=params)
+        response = requests.get(FightersListScraper.BASE_URL, params=params)
 
         if response.status_code != requests.codes["ok"]:
             self.failed = True
@@ -66,28 +67,28 @@ class FightersListScraper:
 
     def scrape_row(self, row: Tag) -> DataDict | None:
         cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
-        if len(cells) != len(FIELD_NAMES) - 1:
+        if len(cells) != len(FightersListScraper.FIELD_NAMES) - 1:
             return
 
         data_dict: dict[str, str | int | bool] = {}
 
         # scrape link
-        data_dict[FIELD_NAMES[0]] = ""
+        data_dict[FightersListScraper.FIELD_NAMES[0]] = ""
         anchor = cells[0].find("a")
         if isinstance(anchor, Tag):
             link = anchor.get("href")
             if isinstance(link, str):
-                data_dict[FIELD_NAMES[0]] = link
+                data_dict[FightersListScraper.FIELD_NAMES[0]] = link
 
         # scrape all other fields except for currentChampion
         cells_text = map(
             lambda c: c.get_text().strip().strip("-").rstrip("."),
             cells[:-1],
         )
-        data_dict.update(zip(FIELD_NAMES[1:-1], cells_text))
+        data_dict.update(zip(FightersListScraper.FIELD_NAMES[1:-1], cells_text))
 
         # convert integer fields
-        for field in FIELD_NAMES[8:-1]:
+        for field in FightersListScraper.FIELD_NAMES[8:-1]:
             val = cast(str, data_dict[field])
             if val.isdecimal():
                 data_dict[field] = int(val)
@@ -95,10 +96,10 @@ class FightersListScraper:
                 del data_dict[field]
 
         # scrape currentChampion
-        data_dict[FIELD_NAMES[-1]] = isinstance(cells[-1].find("img"), Tag)
+        data_dict[FightersListScraper.FIELD_NAMES[-1]] = isinstance(cells[-1].find("img"), Tag)
 
         # remove empty fields
-        for field in FIELD_NAMES[:-4]:
+        for field in FightersListScraper.FIELD_NAMES[:-4]:
             val = cast(str, data_dict[field])
             if val == "":
                 del data_dict[field]
@@ -126,11 +127,14 @@ class FightersListScraper:
         if not hasattr(self, "scraped_data"):
             return
 
-        data_dir = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
-        if not (data_dir.exists() and data_dir.is_dir() and os.access(data_dir, os.W_OK)):
+        if not (
+            FightersListScraper.DATA_DIR.exists()
+            and FightersListScraper.DATA_DIR.is_dir()
+            and os.access(FightersListScraper.DATA_DIR, os.W_OK)
+        ):
             return
 
-        with open(data_dir / f"{self.first_letter}.json", mode="w") as out_file:
+        with open(FightersListScraper.DATA_DIR / f"{self.first_letter}.json", mode="w") as out_file:
             json.dump(self.scraped_data, out_file, indent=2)
 
 
