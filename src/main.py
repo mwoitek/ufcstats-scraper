@@ -1,8 +1,8 @@
+import argparse
 import json
 import os
 from enum import Enum
 from string import ascii_lowercase
-from sys import argv
 from sys import exit
 from time import sleep
 
@@ -34,7 +34,7 @@ def save_links(first_letter: str) -> None:
         links_file.writelines(lines)
 
 
-def scrape_fighters_list(*, letters: str = ascii_lowercase, delay: int = 10) -> ExitCode:
+def scrape_fighters_list(letters: str = ascii_lowercase, delay: int = 10) -> ExitCode:
     if not (letters.isalpha() and delay > 0):
         return ExitCode.ERROR
 
@@ -97,19 +97,27 @@ def scrape_fighters_list(*, letters: str = ascii_lowercase, delay: int = 10) -> 
     return ExitCode.SUCCESS
 
 
-# example usage: python main.py 'abc' 15
+# example usage: python main.py --letters 'abc' --delay 15
 if __name__ == "__main__":
-    args = {"letters": "", "delay": 0}
+    parser = argparse.ArgumentParser(description="Script for scraping fighter lists.")
 
-    try:
-        args["letters"] = argv[1]
-    except IndexError:
-        del args["letters"]
+    parser.add_argument(
+        "-l",
+        "--letters",
+        type=str,
+        dest="letters",
+        default=ascii_lowercase,
+        help="set letters to scrape",
+    )
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=int,
+        dest="delay",
+        default=10,
+        help="set delay between requests",
+    )
 
-    try:
-        args["delay"] = int(argv[2])
-    except (IndexError, ValueError):
-        del args["delay"]
-
-    code = scrape_fighters_list(**args)
+    args = parser.parse_args()
+    code = scrape_fighters_list(args.letters, args.delay)
     exit(code.value)
