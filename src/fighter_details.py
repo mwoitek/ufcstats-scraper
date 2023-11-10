@@ -160,7 +160,7 @@ class FighterDetailsScraper:
 
     # This method isn't really necessary. But it is useful for inspecting the
     # results of `scrape`.
-    def to_json(self) -> str | None:
+    def get_json(self) -> str | None:
         if not hasattr(self, "scraped_data"):
             return
         return json.dumps(self.scraped_data, indent=2)
@@ -179,4 +179,4 @@ if __name__ == "__main__":
         exit(1)
 
     print("Success! Here's the fighter data:")
-    print(scraper.to_json())
+    print(scraper.get_json())
