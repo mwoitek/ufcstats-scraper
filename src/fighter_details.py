@@ -133,6 +133,11 @@ class FighterDetailsScraper:
             except ValueError:
                 continue
 
+        # For some fighters, every career stat is equal to zero. This is
+        # garbage data, and will be disregarded.
+        if all(stat == 0 for stat in data_dict.values()):
+            return
+
         self.career_stats = data_dict if len(data_dict) > 0 else None
         return self.career_stats
 
