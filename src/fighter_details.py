@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime
+from sys import exit
 
 import requests
 from bs4 import BeautifulSoup
@@ -163,3 +164,19 @@ class FighterDetailsScraper:
         if not hasattr(self, "scraped_data"):
             return
         return json.dumps(self.scraped_data, indent=2)
+
+
+if __name__ == "__main__":
+    # example usage
+    link = "http://ufcstats.com/fighter-details/a1f6999fe57236e0"  # Wanderlei Silva
+    scraper = FighterDetailsScraper(link)
+
+    print(f"Scraping fighter details from {link}...")
+    scraper.scrape()
+
+    if scraper.failed:
+        print("Something went wrong! No data was scraped.")
+        exit(1)
+
+    print("Success! Here's the fighter data:")
+    print(scraper.to_json())
