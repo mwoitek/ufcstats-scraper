@@ -4,10 +4,13 @@ import re
 from datetime import datetime
 from pathlib import Path
 from sys import exit
+from time import sleep
 
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+
+from exit_code import ExitCode
 
 DataDict = dict[str, str | int | float]
 
@@ -206,6 +209,56 @@ def read_links(first_letter: str) -> list[str] | None:
         links = [line.strip() for line in links_file]
     links = [link for link in links if link != ""]
     return links if len(links) > 0 else None
+
+
+def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
+    if not (first_letter.isalpha() and len(first_letter) == 1 and delay > 0):
+        print("Invalid arguments! No data was scraped.")
+        return ExitCode.ERROR
+
+    first_letter = first_letter.lower()
+    links = read_links(first_letter)
+    if links is None:
+        print("No link was found, then no data was scraped.")
+        return ExitCode.ERROR
+
+    print(f"Scraping fighter details for letter {first_letter.upper()}...", end="\n\n")
+
+    scraped_data: list[DataDict | None] = []
+    for i, link in enumerate(links, start=1):
+        print(f"Scraping fighter details from {link}...", end=" ")
+        scraper = FighterDetailsScraper(link)
+        scraped_data.append(scraper.scrape())
+        print("Failed." if scraper.failed else "Success!")
+        if i < len(links):
+            print(f"Continuing in {delay} seconds...", end="\n\n")
+            sleep(delay)
+
+    print()
+
+    num_fails = sum(d is None for d in scraped_data)
+    if num_fails == len(scraped_data):
+        print("Failure was complete! Nothing was scraped.")
+        return ExitCode.ERROR
+
+    print("Saving to JSON...", end=" ")
+    data_dir = Path(__file__).resolve().parents[1] / "data" / "fighter_details"
+    if not (data_dir.exists() and data_dir.is_dir() and os.access(data_dir, os.W_OK)):
+        print("Failed.")
+        return ExitCode.ERROR
+    with open(data_dir / f"{first_letter}.json", mode="w") as out_file:
+        json.dump(scraped_data, out_file, indent=2)
+    print("Done!")
+
+    total_fighters = len(scraped_data) - num_fails
+    if num_fails > 0:
+        print(
+            "Partial success.",
+            f"There were failures, but data for {total_fighters} fighters was scraped.",
+        )
+        return ExitCode.PARTIAL_SUCCESS
+    print(f"Complete success! Data for {total_fighters} fighters was scraped.")
+    return ExitCode.SUCCESS
 
 
 if __name__ == "__main__":
