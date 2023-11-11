@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import re
@@ -262,5 +263,22 @@ def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
 
 
 if __name__ == "__main__":
-    # TODO
-    pass
+    parser = argparse.ArgumentParser(description="Script for scraping fighter details.")
+
+    parser.add_argument(
+        "letter",
+        type=str,
+        help="set letter to scrape",
+    )
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=int,
+        dest="delay",
+        default=10,
+        help="set delay between requests",
+    )
+
+    args = parser.parse_args()
+    code = scrape_details_by_letter(args.letter, args.delay)
+    exit(code.value)
