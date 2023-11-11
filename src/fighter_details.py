@@ -9,6 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 
+DataDict = dict[str, str | int | float]
+
 
 # Not a general solution. Works in this case, though.
 def to_camel_case(s: str) -> str:
@@ -160,7 +162,7 @@ class FighterDetailsScraper:
         self.career_stats = data_dict if len(data_dict) > 0 else None
         return self.career_stats
 
-    def scrape(self) -> dict[str, str | int | float] | None:
+    def scrape(self) -> DataDict | None:
         self.get_soup()
 
         self.scrape_header()
@@ -177,7 +179,7 @@ class FighterDetailsScraper:
             self.failed = True
             return
 
-        self.scraped_data: dict[str, str | int | float] = {}
+        self.scraped_data: DataDict = {}
         for attr in valid_attrs:
             self.scraped_data.update(getattr(self, attr))
         return self.scraped_data
