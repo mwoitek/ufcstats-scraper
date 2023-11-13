@@ -1,5 +1,7 @@
 import json
 import os
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -10,6 +12,34 @@ COMMON_FIELDS = ["nickname", "height", "weight", "stance", "wins", "losses", "dr
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR_1 = DATA_DIR / "fighters_list"
 DATA_DIR_2 = DATA_DIR / "fighter_details"
+
+
+def is_valid_height(height: Optional[str]) -> bool:
+    if height is None:
+        return True
+    pattern = r"\d{1}' \d{1,2}\""
+    match = re.match(pattern, height)
+    return isinstance(match, re.Match)
+
+
+def is_valid_weight(weight: Optional[str]) -> bool:
+    if weight is None:
+        return True
+    pattern = r"\d+ lbs"
+    match = re.match(pattern, weight)
+    return isinstance(match, re.Match)
+
+
+def is_valid_reach(reach: Optional[str]) -> bool:
+    if reach is None:
+        return True
+    pattern = r"\d+([.]\d+)?\""
+    match = re.match(pattern, reach)
+    return isinstance(match, re.Match)
+
+
+def is_valid_stance(stance: Optional[str]) -> bool:
+    return stance is None or stance.lower() in ["orthodox", "southpaw", "switch"]
 
 
 @dataclass
@@ -27,10 +57,29 @@ class FighterData1:
     reach: Optional[str] = None
     stance: Optional[str] = None
 
+    def is_valid(self) -> bool:
+        if any(getattr(self, field) == "" for field in ["link", "lastName"]):
+            return False
+
+        if any(getattr(self, field) < 0 for field in ["wins", "losses", "draws"]):
+            return False
+
+        for field in ["firstName", "nickname"]:
+            val = getattr(self, field)
+            if val is not None and val == "":
+                return False
+
+        for field in ["height", "weight", "reach", "stance"]:
+            valid_func: Callable[[Optional[str]], bool] = locals()["is_valid_" + field]
+            if not valid_func(getattr(self, field)):
+                return False
+
+        return True
+
     @classmethod
     def from_dict(cls, d: dict) -> Optional["FighterData1"]:
-        # TODO: add validation
-        return cls(**d)
+        fd = cls(**d)
+        return fd if fd.is_valid() else None
 
 
 @dataclass
