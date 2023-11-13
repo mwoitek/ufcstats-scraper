@@ -213,6 +213,8 @@ def read_links(first_letter: str) -> list[str] | None:
 
 
 def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
+    print("SCRAPING FIGHTER DETAILS", end="\n\n")
+
     if not (first_letter.isalpha() and len(first_letter) == 1 and delay > 0):
         print("Invalid arguments! No data was scraped.")
         return ExitCode.ERROR
@@ -262,6 +264,7 @@ def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
     return ExitCode.SUCCESS
 
 
+# example usage: python fighter_details.py 'b' -d 2
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script for scraping fighter details.")
 
