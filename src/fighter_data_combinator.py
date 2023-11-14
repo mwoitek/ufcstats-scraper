@@ -3,6 +3,7 @@ import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
 from typing import Optional
 from typing import cast
@@ -131,6 +132,32 @@ class FighterData2:
         return fd if fd.is_valid() else None
 
 
+def valid_common_fields(fd1: FighterData1, fd2: FighterData2) -> bool:
+    if any(getattr(fd1, field) != getattr(fd2, field) for field in COMMON_FIELDS):
+        return False
+
+    # check if name is consistent
+    first = fd1.firstName
+    last = fd1.lastName
+    full = fd2.fullName
+    if (first is None and last != full) or (first is not None and first + " " + last != full):
+        return False
+
+    # check if reach is consistent
+    if type(fd1.reach) != type(fd2.reach):
+        return False
+    elif isinstance(fd1.reach, str):
+        try:
+            reach_1 = float(fd1.reach.rstrip('"'))
+            reach_2 = float(cast(str, fd2.reach).rstrip('"'))
+        except (AttributeError, ValueError):
+            return False
+        if reach_1 != reach_2:
+            return False
+
+    return True
+
+
 @dataclass
 class FighterData:
     lastName: str
@@ -155,6 +182,25 @@ class FighterData:
     tdDef: Optional[int] = None
     subAvg: Optional[float] = None
 
+    @classmethod
+    def from_parts(cls, fd1: Optional[FighterData1], fd2: Optional[FighterData2]) -> Optional["FighterData"]:
+        if fd1 is None or fd2 is None or not valid_common_fields(fd1, fd2):
+            return
+
+        data_dict = {}
+
+        fields_1 = chain(["firstName", "lastName", "reach", "currentChampion"], COMMON_FIELDS)
+        data_dict.update(
+            {field: getattr(fd1, field) for field in fields_1 if getattr(fd1, field) is not None}
+        )
+
+        fields_2 = chain(["noContests", "dateOfBirth"], STATS_FIELDS)
+        data_dict.update(
+            {field: getattr(fd2, field) for field in fields_2 if getattr(fd2, field) is not None}
+        )
+
+        return cls(**data_dict)
+
 
 def read_fighter_data(
     type_: int,
@@ -177,29 +223,3 @@ def read_fighter_data(
     fighter_class = FighterData1 if type_ == 1 else FighterData2
     with open(in_file, mode="r") as json_file:
         return json.load(json_file, object_hook=lambda d: fighter_class.from_dict(d))
-
-
-def validate_common_fields(fd1: FighterData1, fd2: FighterData2) -> bool:
-    if any(getattr(fd1, field) != getattr(fd2, field) for field in COMMON_FIELDS):
-        return False
-
-    # check if name is consistent
-    first = fd1.firstName
-    last = fd1.lastName
-    full = fd2.fullName
-    if (first is None and last != full) or (first is not None and first + " " + last != full):
-        return False
-
-    # check if reach is consistent
-    if type(fd1.reach) != type(fd2.reach):
-        return False
-    elif isinstance(fd1.reach, str):
-        try:
-            reach_1 = float(fd1.reach.rstrip('"'))
-            reach_2 = float(cast(str, fd2.reach).rstrip('"'))
-        except (AttributeError, ValueError):
-            return False
-        if reach_1 != reach_2:
-            return False
-
-    return True
