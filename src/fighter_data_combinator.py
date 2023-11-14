@@ -201,6 +201,52 @@ class FighterData:
 
         return cls(**data_dict)
 
+    def get_height(self) -> Optional[int]:
+        if self.height is None:
+            return
+
+        pattern = r"(\d{1})' (\d{1,2})\""
+        match = re.match(pattern, self.height)
+        match = cast(re.Match, match)
+
+        feet = int(match.group(1))
+        inches = int(match.group(2))
+
+        height_in = feet * 12 + inches
+        return height_in
+
+    heightIn = property(fget=get_height)
+
+    def get_weight(self) -> Optional[int]:
+        if self.weight is None:
+            return
+
+        pattern = r"(\d+) lbs"
+        match = re.match(pattern, self.weight)
+        match = cast(re.Match, match)
+
+        weight_lbs = int(match.group(1))
+        return weight_lbs
+
+    weightLbs = property(fget=get_weight)
+
+    def get_reach(self) -> Optional[int | float]:
+        if self.reach is None:
+            return
+
+        pattern = r"(\d+)([.]\d+)?\""
+        match = re.match(pattern, self.reach)
+        match = cast(re.Match, match)
+
+        i_pt = int(match.group(1))
+        if match.group(2) is None:
+            return i_pt
+
+        f_pt = float("0" + match.group(2))
+        return i_pt + f_pt
+
+    reachIn = property(fget=get_reach)
+
 
 def read_fighter_data(
     type_: int,
