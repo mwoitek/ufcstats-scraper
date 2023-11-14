@@ -44,7 +44,7 @@ def is_valid_stance(stance: Optional[str]) -> bool:
     return stance is None or stance.lower() in ["orthodox", "southpaw", "switch"]
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class FighterData1:
     link: str
     lastName: str
@@ -84,7 +84,7 @@ class FighterData1:
         return fd if fd.is_valid() else None
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class FighterData2:
     fullName: str
     wins: int
@@ -158,7 +158,7 @@ def valid_common_fields(fd1: FighterData1, fd2: FighterData2) -> bool:
     return True
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class FighterData:
     lastName: str
     wins: int
