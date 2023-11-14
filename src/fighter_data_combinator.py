@@ -8,6 +8,7 @@ from typing import Optional
 from typing import cast
 
 COMMON_FIELDS = ["nickname", "height", "weight", "stance", "wins", "losses", "draws"]
+STATS_FIELDS = ["slpm", "strAcc", "sapm", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg"]
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR_1 = DATA_DIR / "fighters_list"
@@ -104,10 +105,30 @@ class FighterData2:
     tdDef: Optional[int] = None
     subAvg: Optional[float] = None
 
+    def is_valid(self) -> bool:
+        if self.fullName == "":
+            return False
+
+        if any(getattr(self, field) < 0 for field in ["wins", "losses", "draws", "noContests"]):
+            return False
+
+        if self.nickname is not None and self.nickname == "":
+            return False
+
+        for field in ["height", "weight", "reach", "stance"]:
+            valid_func: Callable[[Optional[str]], bool] = locals()["is_valid_" + field]
+            if not valid_func(getattr(self, field)):
+                return False
+
+        return all(getattr(self, field) is None for field in STATS_FIELDS) or all(
+            isinstance(getattr(self, field), int | float) and getattr(self, field) >= 0
+            for field in STATS_FIELDS
+        )
+
     @classmethod
     def from_dict(cls, d: dict) -> Optional["FighterData2"]:
-        # TODO: add validation
-        return cls(**d)
+        fd = cls(**d)
+        return fd if fd.is_valid() else None
 
 
 @dataclass
