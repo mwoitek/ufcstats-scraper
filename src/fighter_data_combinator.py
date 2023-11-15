@@ -88,7 +88,7 @@ class FighterData1:
                 return False
 
         for field in ["height", "weight", "reach", "stance"]:
-            valid_func: Callable[[Optional[str]], bool] = locals()["is_valid_" + field]
+            valid_func: Callable[[Optional[str]], bool] = globals()["is_valid_" + field]
             if not valid_func(getattr(self, field)):
                 return False
 
@@ -133,7 +133,7 @@ class FighterData2:
             return False
 
         for field in ["height", "weight", "reach", "stance"]:
-            valid_func: Callable[[Optional[str]], bool] = locals()["is_valid_" + field]
+            valid_func: Callable[[Optional[str]], bool] = globals()["is_valid_" + field]
             if not valid_func(getattr(self, field)):
                 return False
 
