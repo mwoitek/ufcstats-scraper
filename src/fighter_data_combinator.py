@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
+from string import ascii_lowercase
 from typing import Optional
 from typing import cast
 
@@ -329,3 +330,28 @@ def read_fighter_data(
     fighter_class = FighterData1 if type_ == 1 else FighterData2
     with open(in_file, mode="r") as json_file:
         return json.load(json_file, object_hook=lambda d: fighter_class.from_dict(d))
+
+
+def read_all_data() -> tuple[list[Optional[FighterData1]], list[Optional[FighterData2]]] | None:
+    print("READING ALL FIGHTER DATA", end="\n\n")
+
+    list_1 = []
+    list_2 = []
+
+    for first_letter in ascii_lowercase:
+        print(f"Reading data corresponding to letter {first_letter.upper()}...", end=" ")
+
+        l1 = read_fighter_data(1, first_letter)
+        l2 = read_fighter_data(2, first_letter)
+
+        if l1 is None or l2 is None or len(l1) != len(l2):
+            print("Failed!")
+            continue
+
+        list_1.extend(l1)
+        list_2.extend(l2)
+        print("Success!")
+
+    if len(list_1) == 0 and len(list_2) == 0:
+        return
+    return list_1, list_2
