@@ -6,8 +6,13 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 from string import ascii_lowercase
+from sys import exit
 from typing import Optional
 from typing import cast
+
+from tqdm import tqdm
+
+from exit_code import ExitCode
 
 COMMON_FIELDS = ["nickname", "height", "weight", "stance", "wins", "losses", "draws"]
 STATS_FIELDS = ["slpm", "strAcc", "sapm", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg"]
@@ -355,3 +360,54 @@ def read_all_data() -> tuple[list[Optional[FighterData1]], list[Optional[Fighter
     if len(list_1) == 0 and len(list_2) == 0:
         return
     return list_1, list_2
+
+
+def combine_all_data() -> ExitCode:
+    data = read_all_data()
+
+    if data is None:
+        print("\nFailed to read fighter data!")
+        return ExitCode.ERROR
+
+    list_1, list_2 = data
+    assert len(list_1) == len(list_2)
+
+    print("\nCOMBINING ALL FIGHTER DATA", end="\n\n")
+
+    combined = []
+    num_failed = 0
+
+    for fd1, fd2 in tqdm(zip(list_1, list_2)):
+        fd = FighterData.from_parts(fd1, fd2)
+        if fd is None:
+            num_failed += 1
+            continue
+        combined.append(fd.to_dict())
+
+    total_fighters = len(list_1)
+    if total_fighters == num_failed:
+        print("\nComplete failure! No fighter data was combined.")
+        return ExitCode.ERROR
+
+    if num_failed > 0:
+        print(f"\nPartial success! Failed to combine data for {num_failed} out of {total_fighters} fighters.")
+    else:
+        print(f"\nComplete success! Combined data for {total_fighters} fighters.")
+
+    print("Saving combined data to JSON...", end=" ")
+
+    if not (DATA_DIR.exists() and DATA_DIR.is_dir() and os.access(DATA_DIR, os.W_OK)):
+        print("Failed!")
+        return ExitCode.ERROR
+
+    out_file = DATA_DIR / "fighters.json"
+    with open(out_file, mode="w") as json_file:
+        json.dump(combined, json_file, indent=2)
+    print("Done!")
+
+    return ExitCode.PARTIAL_SUCCESS if num_failed > 0 else ExitCode.SUCCESS
+
+
+if __name__ == "__main__":
+    code = combine_all_data()
+    exit(code.value)
