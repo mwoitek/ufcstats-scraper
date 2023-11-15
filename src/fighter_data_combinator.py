@@ -201,6 +201,20 @@ class FighterData:
 
         return cls(**data_dict)
 
+    def get_name(self) -> dict[str, str]:
+        return {
+            field: getattr(self, field)
+            for field in ["firstName", "lastName", "nickname"]
+            if getattr(self, field) is not None
+        }
+
+    name = property(fget=get_name)
+
+    def get_record(self) -> dict[str, int]:
+        return {field: getattr(self, field) for field in ["wins", "losses", "draws", "noContests"]}
+
+    record = property(fget=get_record)
+
     def get_height(self) -> Optional[int]:
         if self.height is None:
             return
@@ -246,6 +260,31 @@ class FighterData:
         return i_pt + f_pt
 
     reachIn = property(fget=get_reach)
+
+    def get_physical_features(self) -> Optional[dict[str, int | float]]:
+        keys = ["height", "weight", "reach"]
+        fields = ["heightIn", "weightLbs", "reachIn"]
+        data_dict = {k: getattr(self, f) for k, f in zip(keys, fields) if getattr(self, f) is not None}
+        return data_dict if len(data_dict) > 0 else None
+
+    physicalFeatures = property(fget=get_physical_features)
+
+    def get_career_stats(self) -> Optional[dict[str, float]]:
+        data_dict = {}
+
+        for field in STATS_FIELDS:
+            val = getattr(self, field)
+            if val is None:
+                continue
+            elif isinstance(val, int):
+                # Integer values are percentages. They'll be converted into ratios.
+                data_dict[field] = val / 100
+            elif isinstance(val, float):
+                data_dict[field] = val
+
+        return data_dict if len(data_dict) > 0 else None
+
+    careerStats = property(fget=get_career_stats)
 
 
 def read_fighter_data(
