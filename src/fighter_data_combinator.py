@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from exit_code import ExitCode
 
-COMMON_FIELDS = ["nickname", "height", "weight", "stance", "wins", "losses", "draws"]
+COMMON_FIELDS = ["height", "weight", "stance", "wins", "losses", "draws"]
 STATS_FIELDS = ["slpm", "strAcc", "sapm", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg"]
 
 FINAL_FIELDS = [
@@ -63,12 +63,12 @@ def is_valid_stance(stance: Optional[str]) -> bool:
 @dataclass(frozen=True, kw_only=True)
 class FighterData1:
     link: str
-    lastName: str
     wins: int
     losses: int
     draws: int
     currentChampion: bool
     firstName: Optional[str] = None
+    lastName: Optional[str] = None
     nickname: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
@@ -76,13 +76,13 @@ class FighterData1:
     stance: Optional[str] = None
 
     def is_valid(self) -> bool:
-        if any(getattr(self, field) == "" for field in ["link", "lastName"]):
+        if self.link == "":
             return False
 
         if any(getattr(self, field) < 0 for field in ["wins", "losses", "draws"]):
             return False
 
-        for field in ["firstName", "nickname"]:
+        for field in ["firstName", "lastName", "nickname"]:
             val = getattr(self, field)
             if val is not None and val == "":
                 return False
@@ -153,10 +153,17 @@ def valid_common_fields(fd1: FighterData1, fd2: FighterData2) -> bool:
         return False
 
     # check if name is consistent
-    first = fd1.firstName
-    last = fd1.lastName
-    full = fd2.fullName
-    if (first is None and last != full) or (first is not None and first + " " + last != full):
+    first = "" if fd1.firstName is None else fd1.firstName.replace(".", "")
+    last = "" if fd1.lastName is None else fd1.lastName
+    full_1 = (first + " " + last).strip(" ")
+    full_2 = re.sub(r"\s+", " ", fd2.fullName).replace(".", "")
+    if full_1 != full_2:
+        return False
+
+    # check if nickname is consistent
+    nick_1 = "" if fd1.nickname is None else fd1.nickname
+    nick_2 = "" if fd2.nickname is None else fd2.nickname.rstrip(".")
+    if nick_1 != nick_2:
         return False
 
     # check if reach is consistent
@@ -176,13 +183,13 @@ def valid_common_fields(fd1: FighterData1, fd2: FighterData2) -> bool:
 
 @dataclass(frozen=True, kw_only=True)
 class FighterData:
-    lastName: str
     wins: int
     losses: int
     draws: int
     noContests: int
     currentChampion: bool
     firstName: Optional[str] = None
+    lastName: Optional[str] = None
     nickname: Optional[str] = None
     height: Optional[str] = None
     weight: Optional[str] = None
@@ -205,7 +212,7 @@ class FighterData:
 
         data_dict = {}
 
-        fields_1 = chain(["firstName", "lastName", "reach", "currentChampion"], COMMON_FIELDS)
+        fields_1 = chain(["firstName", "lastName", "nickname", "reach", "currentChampion"], COMMON_FIELDS)
         data_dict.update(
             {field: getattr(fd1, field) for field in fields_1 if getattr(fd1, field) is not None}
         )
