@@ -31,6 +31,8 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR_1 = DATA_DIR / "fighters_list"
 DATA_DIR_2 = DATA_DIR / "fighter_details"
 
+VALID_STANCES = ["orthodox", "southpaw", "switch", "open stance", "sideways"]
+
 
 def is_valid_height(height: Optional[str]) -> bool:
     if height is None:
@@ -57,7 +59,7 @@ def is_valid_reach(reach: Optional[str]) -> bool:
 
 
 def is_valid_stance(stance: Optional[str]) -> bool:
-    return stance is None or stance.lower() in ["orthodox", "southpaw", "switch"]
+    return stance is None or stance.lower() in VALID_STANCES
 
 
 @dataclass(frozen=True, kw_only=True)
