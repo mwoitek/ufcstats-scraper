@@ -11,6 +11,16 @@ from typing import cast
 COMMON_FIELDS = ["nickname", "height", "weight", "stance", "wins", "losses", "draws"]
 STATS_FIELDS = ["slpm", "strAcc", "sapm", "strDef", "tdAvg", "tdAcc", "tdDef", "subAvg"]
 
+FINAL_FIELDS = [
+    "name",
+    "dateOfBirth",
+    "physicalFeatures",
+    "stance",
+    "record",
+    "currentChampion",
+    "careerStats",
+]
+
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATA_DIR_1 = DATA_DIR / "fighters_list"
 DATA_DIR_2 = DATA_DIR / "fighter_details"
@@ -285,6 +295,17 @@ class FighterData:
         return data_dict if len(data_dict) > 0 else None
 
     careerStats = property(fget=get_career_stats)
+
+    def to_dict(self) -> dict:
+        data_dict = {}
+
+        for field in FINAL_FIELDS:
+            val = getattr(self, field)
+            if val is None:
+                continue
+            data_dict[field] = val
+
+        return data_dict
 
 
 def read_fighter_data(
