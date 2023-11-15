@@ -383,15 +383,18 @@ def combine_all_data() -> ExitCode:
 
     combined = []
     num_failed = 0
-
-    for fd1, fd2 in tqdm(zip(list_1, list_2)):
-        fd = FighterData.from_parts(fd1, fd2)
-        if fd is None:
-            num_failed += 1
-            continue
-        combined.append(fd.to_dict())
-
     total_fighters = len(list_1)
+
+    with tqdm(total=total_fighters) as pbar:
+        for fd1, fd2 in zip(list_1, list_2):
+            fd = FighterData.from_parts(fd1, fd2)
+            if fd is None:
+                num_failed += 1
+                pbar.update(1)
+                continue
+            combined.append(fd.to_dict())
+            pbar.update(1)
+
     if total_fighters == num_failed:
         print("\nComplete failure! No fighter data was combined.")
         return ExitCode.ERROR
