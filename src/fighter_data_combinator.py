@@ -282,7 +282,7 @@ class FighterData:
             return i_pt
 
         f_pt = float("0" + match.group(2))
-        return i_pt + f_pt
+        return i_pt + f_pt if f_pt > 0 else i_pt
 
     reachIn = property(fget=get_reach)
 
