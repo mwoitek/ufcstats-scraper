@@ -1,6 +1,38 @@
+from dataclasses import dataclass
+
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+
+
+@dataclass
+class ScrapedRow:
+    link: str | None = None
+    name: str | None = None
+    date: str | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
+
+    def get_location(self) -> dict[str, str] | None:
+        loc_dict = {}
+        for field in ["city", "state", "country"]:
+            val = getattr(self, field)
+            if val is None:
+                continue
+            loc_dict[field] = val
+        return loc_dict if len(loc_dict) > 0 else None
+
+    location = property(fget=get_location)
+
+    def to_dict(self) -> dict[str, str | dict[str, str]] | None:
+        data_dict = {}
+        for field in ["link", "name", "date", "location"]:
+            val = getattr(self, field)
+            if val is None:
+                continue
+            data_dict[field] = val
+        return data_dict if len(data_dict) > 0 else None
 
 
 class EventsListScraper:
