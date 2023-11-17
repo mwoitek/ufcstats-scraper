@@ -1,7 +1,10 @@
 import dataclasses
+import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -30,7 +33,7 @@ class ScrapedRow:
 
     def to_dict(self) -> dict[str, str | dict[str, str]] | None:
         data_dict = {}
-        for field in ["link", "name", "date", "location"]:
+        for field in ["name", "date", "location"]:
             val = getattr(self, field)
             if val is None:
                 continue
@@ -43,6 +46,7 @@ class ScrapedRow:
 
 class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
+    DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "events_list"
 
     def __init__(self) -> None:
         self.failed = False
@@ -133,11 +137,33 @@ class EventsListScraper:
         self.scraped_data = scraped_data[2:]
         return self.scraped_data
 
+    def save_json(self) -> None:
+        if not hasattr(self, "scraped_data"):
+            return
+
+        if not (
+            EventsListScraper.DATA_DIR.exists()
+            and EventsListScraper.DATA_DIR.is_dir()
+            and os.access(EventsListScraper.DATA_DIR, os.W_OK)
+        ):
+            return
+
+        dicts = []
+        for scraped_row in self.scraped_data:
+            if scraped_row is None:
+                continue
+            d = scraped_row.to_dict()
+            if d is None:
+                continue
+            dicts.append(d)
+
+        with open(EventsListScraper.DATA_DIR / "events_list.json", mode="w") as out_file:
+            json.dump(dicts, out_file, indent=2)
+
 
 if __name__ == "__main__":
     scraper = EventsListScraper()
 
     # TODO: remove after class is complete
-    scraped_data = scraper.scrape()
-    assert scraped_data is not None
-    print(scraped_data[:5])
+    scraper.scrape()
+    scraper.save_json()
