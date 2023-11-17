@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from sys import exit
 
 import requests
 from bs4 import BeautifulSoup
@@ -118,7 +119,7 @@ class EventsListScraper:
 
         return scraped_row if scraped_row.is_non_empty() else None
 
-    def scrape(self) -> list[ScrapedRow | None] | None:
+    def scrape(self) -> list[ScrapedRow] | None:
         self.get_soup()
         self.get_table_rows()
 
@@ -134,7 +135,8 @@ class EventsListScraper:
         # empty. And the first non-empty row corresponds to the next event.
         # This row is to be skipped, since we only want data for events that
         # have already happened.
-        self.scraped_data = scraped_data[2:]
+        self.failed_rows = sum(s is None for s in scraped_data[2:])
+        self.scraped_data = [s for s in scraped_data[2:] if s is not None]
         return self.scraped_data
 
     def save_json(self) -> None:
@@ -149,11 +151,12 @@ class EventsListScraper:
             return
 
         dicts = []
+        self.failed_dicts = 0
+
         for scraped_row in self.scraped_data:
-            if scraped_row is None:
-                continue
             d = scraped_row.to_dict()
             if d is None:
+                self.failed_dicts += 1
                 continue
             dicts.append(d)
 
@@ -165,5 +168,26 @@ if __name__ == "__main__":
     scraper = EventsListScraper()
 
     # TODO: remove after class is complete
+    print("SCRAPING EVENTS LIST...", end="\n\n")
     scraper.scrape()
+
+    if scraper.failed:
+        print("Failed! No data was scraped.")
+        exit(1)
+
+    if scraper.failed_rows == 0:
+        print("Success! All event data was scraped.", end="\n\n")
+    else:
+        print(f"Partial success. Failed to scrape data for {scraper.failed_rows} events.", end="\n\n")
+
+    print("Saving scraped data to JSON...", end="\n\n")
     scraper.save_json()
+
+    if not hasattr(scraper, "failed_dicts"):
+        print("Failed! No data was saved.")
+        exit(1)
+
+    if scraper.failed_dicts == 0:
+        print("Success! All event data was saved.")
+    else:
+        print(f"Partial success. Failed to save data for {scraper.failed_dicts} events.")
