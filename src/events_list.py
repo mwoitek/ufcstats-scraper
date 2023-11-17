@@ -1,5 +1,7 @@
 import dataclasses
+import re
 from dataclasses import dataclass
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
@@ -72,6 +74,44 @@ class EventsListScraper:
 
         self.rows = rows
         return self.rows
+
+    def scrape_row(self, row: Tag) -> ScrapedRow | None:
+        cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
+        if len(cols) != 2:
+            return
+
+        scraped_row = ScrapedRow()
+
+        # scrape link and name
+        anchor = cols[0].find("a")
+        if isinstance(anchor, Tag):
+            link = anchor.get("href")
+            if isinstance(link, str):
+                scraped_row.link = link
+
+            name = anchor.get_text().strip()
+            if name != "":
+                scraped_row.name = name
+
+        # scrape date
+        date_span = cols[0].find("span")
+        if isinstance(date_span, Tag):
+            date_str = date_span.get_text().strip()
+            try:
+                scraped_row.date = datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+
+        # scrape location
+        loc_pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
+        loc_str = cols[1].get_text().strip()
+        match = re.match(loc_pattern, loc_str)
+        if match is not None:
+            for field, val in match.groupdict().items():
+                if isinstance(val, str):
+                    setattr(scraped_row, field, val.strip())
+
+        return scraped_row if scraped_row.is_non_empty() else None
 
 
 if __name__ == "__main__":
