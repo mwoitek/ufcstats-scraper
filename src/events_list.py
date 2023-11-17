@@ -48,6 +48,7 @@ class ScrapedRow:
 class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
     DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "events_list"
+    LINKS_DIR = Path(__file__).resolve().parents[1] / "data" / "links" / "events"
 
     def __init__(self) -> None:
         self.failed = False
@@ -163,12 +164,34 @@ class EventsListScraper:
         with open(EventsListScraper.DATA_DIR / "events_list.json", mode="w") as out_file:
             json.dump(dicts, out_file, indent=2)
 
+    def save_links(self) -> None:
+        if not hasattr(self, "scraped_data"):
+            return
+
+        if not (
+            EventsListScraper.LINKS_DIR.exists()
+            and EventsListScraper.LINKS_DIR.is_dir()
+            and os.access(EventsListScraper.LINKS_DIR, os.W_OK)
+        ):
+            return
+
+        links = []
+        self.failed_links = 0
+
+        for scraped_row in self.scraped_data:
+            link = scraped_row.link
+            if link is None:
+                self.failed_links += 1
+                continue
+            links.append(link + "\n")
+
+        with open(EventsListScraper.LINKS_DIR / "events_list.txt", mode="w") as links_file:
+            links_file.writelines(links)
+
 
 if __name__ == "__main__":
-    scraper = EventsListScraper()
-
-    # TODO: remove after class is complete
     print("SCRAPING EVENTS LIST...", end="\n\n")
+    scraper = EventsListScraper()
     scraper.scrape()
 
     if scraper.failed:
@@ -188,6 +211,18 @@ if __name__ == "__main__":
         exit(1)
 
     if scraper.failed_dicts == 0:
-        print("Success! All event data was saved.")
+        print("Success! All event data was saved.", end="\n\n")
     else:
-        print(f"Partial success. Failed to save data for {scraper.failed_dicts} events.")
+        print(f"Partial success. Failed to save data for {scraper.failed_dicts} events.", end="\n\n")
+
+    print("Saving scraped links...", end="\n\n")
+    scraper.save_links()
+
+    if not hasattr(scraper, "failed_links"):
+        print("Failed! No link was saved.")
+        exit(1)
+
+    if scraper.failed_links == 0:
+        print("Success! All event links were saved.")
+    else:
+        print(f"Partial success. Failed to save links for {scraper.failed_links} events.")
