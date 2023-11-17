@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass
 
 import requests
@@ -33,6 +34,9 @@ class ScrapedRow:
                 continue
             data_dict[field] = val
         return data_dict if len(data_dict) > 0 else None
+
+    def is_non_empty(self) -> bool:
+        return any(getattr(self, field.name) is not None for field in dataclasses.fields(self))
 
 
 class EventsListScraper:
