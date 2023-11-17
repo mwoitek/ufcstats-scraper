@@ -75,7 +75,8 @@ class EventsListScraper:
         self.rows = rows
         return self.rows
 
-    def scrape_row(self, row: Tag) -> ScrapedRow | None:
+    @staticmethod
+    def scrape_row(row: Tag) -> ScrapedRow | None:
         cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cols) != 2:
             return
