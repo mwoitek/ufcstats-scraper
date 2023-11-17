@@ -114,15 +114,30 @@ class EventsListScraper:
 
         return scraped_row if scraped_row.is_non_empty() else None
 
+    def scrape(self) -> list[ScrapedRow | None] | None:
+        self.get_soup()
+        self.get_table_rows()
+
+        if not hasattr(self, "rows"):
+            return
+
+        scraped_data = [EventsListScraper.scrape_row(row) for row in self.rows]
+        if len(scraped_data) < 3 or all(s is None for s in scraped_data):
+            self.failed = True
+            return
+
+        # The first 2 rows need to be skipped. The very first one is always
+        # empty. And the first non-empty row corresponds to the next event.
+        # This row is to be skipped, since we only want data for events that
+        # have already happened.
+        self.scraped_data = scraped_data[2:]
+        return self.scraped_data
+
 
 if __name__ == "__main__":
     scraper = EventsListScraper()
 
     # TODO: remove after class is complete
-    soup = scraper.get_soup()
-    assert soup is not None
-
-    rows = scraper.get_table_rows()
-    assert rows is not None
-
-    print(rows)
+    scraped_data = scraper.scrape()
+    assert scraped_data is not None
+    print(scraped_data[:5])
