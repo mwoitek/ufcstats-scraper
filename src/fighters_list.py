@@ -153,6 +153,7 @@ class FightersListScraper:
 
     BASE_URL = "http://www.ufcstats.com/statistics/fighters"
     DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
+    LINKS_DIR = Path(__file__).resolve().parents[1] / "data" / "links" / "fighters"
 
     def __init__(self, first_letter: str) -> None:
         self.first_letter = first_letter
@@ -254,38 +255,41 @@ class FightersListScraper:
         self.scraped_data = scraped_data
         return self.scraped_data
 
-    def save_json(self) -> None:
+    def save_json(self) -> bool:
         if not hasattr(self, "scraped_data"):
-            return
+            return False
 
         if not (
             FightersListScraper.DATA_DIR.exists()
             and FightersListScraper.DATA_DIR.is_dir()
             and os.access(FightersListScraper.DATA_DIR, os.W_OK)
         ):
-            return
+            return False
 
-        with open(FightersListScraper.DATA_DIR / f"{self.first_letter}.json", mode="w") as out_file:
-            json.dump(self.scraped_data, out_file, indent=2)
+        out_file = FightersListScraper.DATA_DIR / f"{self.first_letter}.json"
+        out_data = [r.model_dump(by_alias=True, exclude_none=True) for r in self.scraped_data]
+        with open(out_file, mode="w") as json_file:
+            json.dump(out_data, json_file, indent=2)
 
+        return True
 
-def save_links(first_letter: str) -> None:
-    in_file = FightersListScraper.DATA_DIR / f"{first_letter}.json"
-    if not (in_file.exists() and in_file.is_file() and os.access(in_file, os.R_OK)):
-        return
+    def save_links(self) -> bool:
+        if not hasattr(self, "scraped_data"):
+            return False
 
-    links_dir = FightersListScraper.DATA_DIR.parent / "links" / "fighters"
-    if not (links_dir.exists() and links_dir.is_dir() and os.access(links_dir, os.W_OK)):
-        return
+        if not (
+            FightersListScraper.LINKS_DIR.exists()
+            and FightersListScraper.LINKS_DIR.is_dir()
+            and os.access(FightersListScraper.LINKS_DIR, os.W_OK)
+        ):
+            return False
 
-    links: list[str] = []
-    with open(in_file, mode="r") as json_file:
-        links = json.load(json_file, object_hook=lambda d: d.get("link", ""))
+        out_file = FightersListScraper.LINKS_DIR / f"{self.first_letter}.txt"
+        links = [f"{r.link}\n" for r in self.scraped_data]
+        with open(out_file, mode="w") as links_file:
+            links_file.writelines(links)
 
-    lines = [f"{link}\n" for link in links if link != ""]
-    out_file = links_dir / f"{first_letter}.txt"
-    with open(out_file, mode="w") as links_file:
-        links_file.writelines(lines)
+        return True
 
 
 def scrape_fighters_list(letters: str = ascii_lowercase, delay: int = 10) -> ExitCode:
