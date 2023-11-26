@@ -1,10 +1,12 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
 from time import sleep
+from typing import ClassVar
 from typing import Optional
 from typing import cast
 
@@ -15,6 +17,8 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
+from pydantic import ValidationInfo
+from pydantic import field_validator
 from pydantic.alias_generators import to_camel
 
 from exit_code import ExitCode
@@ -27,25 +31,104 @@ class ScrapedRow(BaseModel):
         alias_generator=to_camel,
         extra="forbid",
         populate_by_name=True,
+        regex_engine="python-re",
         str_min_length=1,
         str_strip_whitespace=True,
     )
+
+    VALID_STANCES: ClassVar[set[str]] = {"Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"}
 
     link: HttpUrl
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     nickname: Optional[str] = None
-    height_str: Optional[str] = Field(default=None, exclude=True)
+    height_str: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        pattern=r"\d{1}' \d{1,2}\"",
+    )
     height: Optional[int] = Field(default=None, gt=0)
-    weight_str: Optional[str] = Field(default=None, exclude=True)
+    weight_str: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        pattern=r"\d+ lbs[.]",
+    )
     weight: Optional[int] = Field(default=None, gt=0)
-    reach_str: Optional[str] = Field(default=None, exclude=True)
+    reach_str: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        pattern=r"\d+[.]0\"",
+    )
     reach: Optional[int] = Field(default=None, gt=0)
     stance: Optional[str] = None
     wins: int = Field(..., ge=0)
     losses: int = Field(..., ge=0)
     draws: int = Field(..., ge=0)
     current_champion: bool = False
+
+    @field_validator("height")
+    @classmethod
+    def fill_height(cls, height: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(height, int):
+            return height
+
+        height_str = info.data.get("height_str")
+        if not isinstance(height_str, str):
+            return
+
+        pattern = r"(\d{1})' (\d{1,2})\""
+        match = re.match(pattern, height_str)
+        match = cast(re.Match, match)
+
+        feet = int(match.group(1))
+        inches = int(match.group(2))
+
+        height = feet * 12 + inches
+        return height
+
+    @field_validator("weight")
+    @classmethod
+    def fill_weight(cls, weight: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(weight, int):
+            return weight
+
+        weight_str = info.data.get("weight_str")
+        if not isinstance(weight_str, str):
+            return
+
+        pattern = r"(\d+) lbs[.]"
+        match = re.match(pattern, weight_str)
+        match = cast(re.Match, match)
+
+        weight = int(match.group(1))
+        return weight
+
+    @field_validator("reach")
+    @classmethod
+    def fill_reach(cls, reach: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(reach, int):
+            return reach
+
+        reach_str = info.data.get("reach_str")
+        if not isinstance(reach_str, str):
+            return
+
+        pattern = r"(\d+)[.]0\""
+        match = re.match(pattern, reach_str)
+        match = cast(re.Match, match)
+
+        reach = int(match.group(1))
+        return reach
+
+    @field_validator("stance")
+    @classmethod
+    def check_stance(cls, stance: Optional[str]) -> Optional[str]:
+        if stance is None:
+            return
+        stance = stance.title()
+        if stance not in cls.VALID_STANCES:
+            raise ValueError(f"invalid stance: {stance}")
+        return stance
 
 
 class FightersListScraper:
