@@ -5,15 +5,47 @@ from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
 from time import sleep
+from typing import Optional
 from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import HttpUrl
+from pydantic.alias_generators import to_camel
 
 from exit_code import ExitCode
 
 DataDict = dict[str, str | int | bool]
+
+
+class ScrapedRow(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        extra="forbid",
+        populate_by_name=True,
+        str_min_length=1,
+        str_strip_whitespace=True,
+    )
+
+    link: HttpUrl
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    nickname: Optional[str] = None
+    height_str: Optional[str] = Field(default=None, exclude=True)
+    height: Optional[int] = Field(default=None, gt=0)
+    weight_str: Optional[str] = Field(default=None, exclude=True)
+    weight: Optional[int] = Field(default=None, gt=0)
+    reach_str: Optional[str] = Field(default=None, exclude=True)
+    reach: Optional[int] = Field(default=None, gt=0)
+    stance: Optional[str] = None
+    wins: int = Field(..., ge=0)
+    losses: int = Field(..., ge=0)
+    draws: int = Field(..., ge=0)
+    current_champion: bool = False
 
 
 class FightersListScraper:
