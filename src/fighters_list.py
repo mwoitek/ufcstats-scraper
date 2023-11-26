@@ -17,13 +17,12 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
+from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic.alias_generators import to_camel
 
 from exit_code import ExitCode
-
-DataDict = dict[str, str | int | bool]
 
 
 class ScrapedRow(BaseModel):
@@ -153,20 +152,6 @@ class FightersListScraper:
     """
 
     BASE_URL = "http://www.ufcstats.com/statistics/fighters"
-    FIELD_NAMES = [
-        "link",
-        "firstName",
-        "lastName",
-        "nickname",
-        "height",
-        "weight",
-        "reach",
-        "stance",
-        "wins",
-        "losses",
-        "draws",
-        "currentChampion",
-    ]
     DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
 
     def __init__(self, first_letter: str) -> None:
@@ -205,55 +190,61 @@ class FightersListScraper:
         self.rows = rows
         return self.rows
 
-    def scrape_row(self, row: Tag) -> DataDict | None:
+    @staticmethod
+    def scrape_row(row: Tag) -> ScrapedRow | None:
         cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
-        if len(cells) != len(FightersListScraper.FIELD_NAMES) - 1:
+        if len(cells) != 11:
             return
 
-        data_dict: dict[str, str | int | bool] = {}
+        data_dict: dict = {}
 
         # scrape link
-        data_dict[FightersListScraper.FIELD_NAMES[0]] = ""
         anchor = cells[0].find("a")
         if isinstance(anchor, Tag):
             link = anchor.get("href")
             if isinstance(link, str):
-                data_dict[FightersListScraper.FIELD_NAMES[0]] = link
+                data_dict["link"] = link
 
-        # scrape all other fields except for currentChampion
-        cells_text = map(
-            lambda c: c.get_text().strip().strip("-").rstrip("."),
-            cells[:-1],
-        )
-        data_dict.update(zip(FightersListScraper.FIELD_NAMES[1:-1], cells_text))
+        if "link" not in data_dict:
+            return
 
-        # convert integer fields
-        for field in FightersListScraper.FIELD_NAMES[8:-1]:
-            val = cast(str, data_dict[field])
-            if val.isdecimal():
-                data_dict[field] = int(val)
-            else:
-                del data_dict[field]
+        # scrape all other fields except for current_champion
+        FIELDS = [
+            "first_name",
+            "last_name",
+            "nickname",
+            "height_str",
+            "weight_str",
+            "reach_str",
+            "stance",
+            "wins",
+            "losses",
+            "draws",
+        ]
+        cells_text = map(lambda c: c.get_text().strip().strip("-"), cells[:-1])
+        for field, text in zip(FIELDS, cells_text):
+            if text != "":
+                data_dict[field] = text
 
-        # scrape currentChampion
-        data_dict[FightersListScraper.FIELD_NAMES[-1]] = isinstance(cells[-1].find("img"), Tag)
+        if any(field not in data_dict for field in ["wins", "losses", "draws"]):
+            return
 
-        # remove empty fields
-        for field in FightersListScraper.FIELD_NAMES[:-4]:
-            val = cast(str, data_dict[field])
-            if val == "":
-                del data_dict[field]
+        # scrape current_champion
+        data_dict["current_champion"] = isinstance(cells[-1].find("img"), Tag)
 
-        return data_dict if len(data_dict) > 1 else None
+        try:
+            return ScrapedRow.model_validate(data_dict)
+        except ValidationError:
+            return
 
-    def scrape(self) -> list[DataDict] | None:
+    def scrape(self) -> list[ScrapedRow] | None:
         self.get_soup()
         self.get_table_rows()
 
         if not hasattr(self, "rows"):
             return
 
-        data_iter = map(lambda r: self.scrape_row(r), self.rows)
+        data_iter = map(lambda r: FightersListScraper.scrape_row(r), self.rows)
         scraped_data = [d for d in data_iter if d is not None]
 
         if len(scraped_data) == 0:
