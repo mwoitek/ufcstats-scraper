@@ -3,6 +3,7 @@ import os
 import re
 from datetime import date
 from datetime import datetime
+from itertools import dropwhile
 from pathlib import Path
 from sys import exit
 from typing import Optional
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
+from pydantic import ValidationError
 from pydantic import computed_field
 from pydantic import model_validator
 
@@ -99,38 +101,37 @@ class EventsListScraper:
         if len(cols) != 2:
             return
 
-        scraped_row = ScrapedRow()
-
-        # scrape link and name
+        # Scrape link and name
         anchor = cols[0].find("a")
-        if isinstance(anchor, Tag):
-            link = anchor.get("href")
-            if isinstance(link, str):
-                scraped_row.link = link
+        if not isinstance(anchor, Tag):
+            return
 
-            name = anchor.get_text().strip()
-            if name != "":
-                scraped_row.name = name
+        link = anchor.get("href")
+        if not isinstance(link, str):
+            return
 
-        # scrape date
+        data_dict: dict = {
+            "link": link,
+            "name": anchor.get_text().strip(),
+        }
+
+        # Scrape date
         date_span = cols[0].find("span")
-        if isinstance(date_span, Tag):
-            date_str = date_span.get_text().strip()
-            try:
-                scraped_row.date = datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
-            except ValueError:
-                pass
+        if not isinstance(date_span, Tag):
+            return
 
-        # scrape location
-        loc_pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
-        loc_str = cols[1].get_text().strip()
-        match = re.match(loc_pattern, loc_str)
-        if match is not None:
-            for field, val in match.groupdict().items():
-                if isinstance(val, str):
-                    setattr(scraped_row, field, val.strip())
+        data_dict["date_str"] = date_span.get_text().strip()
 
-        return scraped_row if scraped_row.is_non_empty() else None
+        # Scrape location
+        try:
+            data_dict["location"] = Location(location_str=cols[1].get_text().strip())
+        except ValidationError:
+            return
+
+        try:
+            return ScrapedRow.model_validate(data_dict)
+        except ValidationError:
+            return
 
     def scrape(self) -> list[ScrapedRow] | None:
         self.get_soup()
@@ -139,17 +140,17 @@ class EventsListScraper:
         if not hasattr(self, "rows"):
             return
 
-        scraped_data = [EventsListScraper.scrape_row(row) for row in self.rows]
-        if len(scraped_data) < 3 or all(s is None for s in scraped_data):
+        data_iter = map(lambda r: EventsListScraper.scrape_row(r), self.rows)
+        data_iter = filter(lambda r: r is not None, data_iter)
+        today = date.today()
+        data_iter = dropwhile(lambda r: r.date > today, data_iter)
+
+        scraped_data = list(data_iter)
+        if len(scraped_data) == 0:
             self.failed = True
             return
 
-        # The first 2 rows need to be skipped. The very first one is always
-        # empty. And the first non-empty row corresponds to the next event.
-        # This row is to be skipped, since we only want data for events that
-        # have already happened.
-        self.failed_rows = sum(s is None for s in scraped_data[2:])
-        self.scraped_data = [s for s in scraped_data[2:] if s is not None]
+        self.scraped_data = scraped_data
         return self.scraped_data
 
     def save_json(self) -> None:
