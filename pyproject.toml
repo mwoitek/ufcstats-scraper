@@ -6,3 +6,15 @@ target-version = ["py311"]
 profile = "black"
 line_length = 110
 force_single_line = true
+
+[tool.pylsp-mypy]
+enabled = false
+live_mode = false
+dmypy = true
+report_progress = true
+
+[tool.pyright]
+useLibraryCodeForTypes = true
+analyzeUnannotatedFunctions = false
+reportUnnecessaryCast = "information"
+reportUnnecessaryTypeIgnoreComment = "information"
