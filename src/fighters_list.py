@@ -21,6 +21,7 @@ from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
+from pydantic import model_validator
 from pydantic import validate_call
 from pydantic.alias_generators import to_camel
 
@@ -64,6 +65,13 @@ class ScrapedRow(BaseModel):
     losses: int = Field(..., ge=0)
     draws: int = Field(..., ge=0)
     current_champion: bool = False
+
+    @field_validator("first_name", "last_name", "nickname")
+    @classmethod
+    def fix_consecutive_spaces(cls, s: Optional[str]) -> Optional[str]:
+        if s is None:
+            return
+        return re.sub(r"\s{2,}", " ", s)
 
     @field_validator("height")
     @classmethod
@@ -128,6 +136,22 @@ class ScrapedRow(BaseModel):
         if stance not in cls.VALID_STANCES:
             raise ValueError(f"invalid stance: {stance}")
         return stance
+
+    @model_validator(mode="after")
+    def check_full_name(self) -> "ScrapedRow":
+        first_name = self.first_name
+        if first_name is None:
+            first_name = ""
+
+        last_name = self.last_name
+        if last_name is None:
+            last_name = ""
+
+        full_name = (first_name + " " + last_name).strip()
+        if full_name == "":
+            raise ValueError("fighter has no name")
+
+        return self
 
 
 class FightersListScraper:
@@ -300,7 +324,6 @@ def scrape_fighters_list(
     print("SCRAPING FIGHTERS LIST", end="\n\n")
     num_letters = len(letters)
 
-    # HERE
     for i, letter in enumerate(letters, start=1):
         scraper = FightersListScraper(letter)
 
