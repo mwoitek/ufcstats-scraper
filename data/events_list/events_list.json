@@ -1,5 +1,14 @@
 [
   {
+    "name": "UFC Fight Night: Allen vs. Craig",
+    "date": "2023-11-18",
+    "location": {
+      "city": "Las Vegas",
+      "state": "Nevada",
+      "country": "USA"
+    }
+  },
+  {
     "name": "UFC 295: Prochazka vs. Pereira",
     "date": "2023-11-11",
     "location": {

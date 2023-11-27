@@ -1,11 +1,12 @@
+import datetime
 import json
 import os
 import re
-from datetime import date
-from datetime import datetime
+from collections.abc import Iterator
 from itertools import dropwhile
 from pathlib import Path
 from sys import exit
+from typing import Any
 from typing import Optional
 from typing import cast
 
@@ -18,6 +19,7 @@ from pydantic import Field
 from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import computed_field
+from pydantic import field_serializer
 from pydantic import model_validator
 
 
@@ -37,7 +39,7 @@ class Location(BaseModel):
 
         for field, val in match.groupdict().items():
             if isinstance(val, str):
-                setattr(self, field, val.strip())
+                setattr(self, field, val)
 
         return self
 
@@ -52,11 +54,19 @@ class ScrapedRow(BaseModel):
 
     @computed_field
     @property
-    def date(self) -> date:
+    def date(self) -> datetime.date:
         try:
-            return datetime.strptime(self.date_str, "%B %d, %Y").date()
+            return datetime.datetime.strptime(self.date_str, "%B %d, %Y").date()
         except ValueError as exc:
             raise exc
+
+    @field_serializer("date")
+    def serialize_date(self, date: datetime.date) -> str:
+        return date.isoformat()
+
+    def to_dict(self) -> dict[str, Any]:
+        data_dict = self.model_dump(exclude_none=True)
+        return {k: data_dict[k] for k in ["name", "date", "location"]}
 
 
 class EventsListScraper:
@@ -112,7 +122,7 @@ class EventsListScraper:
 
         data_dict: dict = {
             "link": link,
-            "name": anchor.get_text().strip(),
+            "name": anchor.get_text(),
         }
 
         # Scrape date
@@ -120,11 +130,11 @@ class EventsListScraper:
         if not isinstance(date_span, Tag):
             return
 
-        data_dict["date_str"] = date_span.get_text().strip()
+        data_dict["date_str"] = date_span.get_text()
 
         # Scrape location
         try:
-            data_dict["location"] = Location(location_str=cols[1].get_text().strip())
+            data_dict["location"] = Location(location_str=cols[1].get_text())
         except ValidationError:
             return
 
@@ -142,8 +152,8 @@ class EventsListScraper:
 
         data_iter = map(lambda r: EventsListScraper.scrape_row(r), self.rows)
         data_iter = filter(lambda r: r is not None, data_iter)
-        data_iter = cast(filter[ScrapedRow], data_iter)
-        today = date.today()
+        data_iter = cast(Iterator[ScrapedRow], data_iter)
+        today = datetime.date.today()
         data_iter = dropwhile(lambda r: r.date > today, data_iter)
 
         scraped_data = list(data_iter)
@@ -166,7 +176,7 @@ class EventsListScraper:
             return False
 
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
-        out_data = [r.model_dump(exclude_none=True) for r in self.scraped_data]
+        out_data = [r.to_dict() for r in self.scraped_data]
         with open(out_file, mode="w") as json_file:
             json.dump(out_data, json_file, indent=2)
 
@@ -192,7 +202,8 @@ class EventsListScraper:
 
 
 if __name__ == "__main__":
-    print("SCRAPING EVENTS LIST...", end="\n\n")
+    print("SCRAPING EVENTS LIST", end="\n\n")
+
     scraper = EventsListScraper()
     scraper.scrape()
 
@@ -200,31 +211,14 @@ if __name__ == "__main__":
         print("Failed! No data was scraped.")
         exit(1)
 
-    if scraper.failed_rows == 0:
-        print("Success! All event data was scraped.", end="\n\n")
-    else:
-        print(f"Partial success. Failed to scrape data for {scraper.failed_rows} events.", end="\n\n")
+    print(f"Scraped data for {len(scraper.scraped_data)} events.")
 
-    print("Saving scraped data to JSON...", end="\n\n")
-    scraper.save_json()
+    print("Saving to JSON...", end=" ")
+    saved = scraper.save_json()
+    msg = "Done!" if saved else "Failed!"
+    print(msg)
 
-    if not hasattr(scraper, "failed_dicts"):
-        print("Failed! No data was saved.")
-        exit(1)
-
-    if scraper.failed_dicts == 0:
-        print("Success! All event data was saved.", end="\n\n")
-    else:
-        print(f"Partial success. Failed to save data for {scraper.failed_dicts} events.", end="\n\n")
-
-    print("Saving scraped links...", end="\n\n")
-    scraper.save_links()
-
-    if not hasattr(scraper, "failed_links"):
-        print("Failed! No link was saved.")
-        exit(1)
-
-    if scraper.failed_links == 0:
-        print("Success! All event links were saved.")
-    else:
-        print(f"Partial success. Failed to save links for {scraper.failed_links} events.")
+    print("Saving scraped links...", end=" ")
+    saved = scraper.save_links()
+    msg = "Done!" if saved else "Failed!"
+    print(msg)
