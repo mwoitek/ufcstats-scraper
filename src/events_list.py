@@ -142,6 +142,7 @@ class EventsListScraper:
 
         data_iter = map(lambda r: EventsListScraper.scrape_row(r), self.rows)
         data_iter = filter(lambda r: r is not None, data_iter)
+        data_iter = cast(filter[ScrapedRow], data_iter)
         today = date.today()
         data_iter = dropwhile(lambda r: r.date > today, data_iter)
 
@@ -153,53 +154,41 @@ class EventsListScraper:
         self.scraped_data = scraped_data
         return self.scraped_data
 
-    def save_json(self) -> None:
+    def save_json(self) -> bool:
         if not hasattr(self, "scraped_data"):
-            return
+            return False
 
         if not (
             EventsListScraper.DATA_DIR.exists()
             and EventsListScraper.DATA_DIR.is_dir()
             and os.access(EventsListScraper.DATA_DIR, os.W_OK)
         ):
-            return
+            return False
 
-        dicts = []
-        self.failed_dicts = 0
+        out_file = EventsListScraper.DATA_DIR / "events_list.json"
+        out_data = [r.model_dump(exclude_none=True) for r in self.scraped_data]
+        with open(out_file, mode="w") as json_file:
+            json.dump(out_data, json_file, indent=2)
 
-        for scraped_row in self.scraped_data:
-            d = scraped_row.to_dict()
-            if d is None:
-                self.failed_dicts += 1
-                continue
-            dicts.append(d)
+        return True
 
-        with open(EventsListScraper.DATA_DIR / "events_list.json", mode="w") as out_file:
-            json.dump(dicts, out_file, indent=2)
-
-    def save_links(self) -> None:
+    def save_links(self) -> bool:
         if not hasattr(self, "scraped_data"):
-            return
+            return False
 
         if not (
             EventsListScraper.LINKS_DIR.exists()
             and EventsListScraper.LINKS_DIR.is_dir()
             and os.access(EventsListScraper.LINKS_DIR, os.W_OK)
         ):
-            return
+            return False
 
-        links = []
-        self.failed_links = 0
-
-        for scraped_row in self.scraped_data:
-            link = scraped_row.link
-            if link is None:
-                self.failed_links += 1
-                continue
-            links.append(link + "\n")
-
-        with open(EventsListScraper.LINKS_DIR / "events_list.txt", mode="w") as links_file:
+        out_file = EventsListScraper.LINKS_DIR / "events_list.txt"
+        links = [f"{r.link}\n" for r in self.scraped_data]
+        with open(out_file, mode="w") as links_file:
             links_file.writelines(links)
+
+        return True
 
 
 if __name__ == "__main__":
