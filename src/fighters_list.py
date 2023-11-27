@@ -37,7 +37,7 @@ class ScrapedRow(BaseModel):
 
     VALID_STANCES: ClassVar[set[str]] = {"Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"}
 
-    link: HttpUrl
+    link: HttpUrl = Field(..., exclude=True)
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     nickname: Optional[str] = None
@@ -46,19 +46,19 @@ class ScrapedRow(BaseModel):
         exclude=True,
         pattern=r"\d{1}' \d{1,2}\"",
     )
-    height: Optional[int] = Field(default=None, gt=0)
+    height: Optional[int] = Field(default=None, validate_default=True, gt=0)
     weight_str: Optional[str] = Field(
         default=None,
         exclude=True,
         pattern=r"\d+ lbs[.]",
     )
-    weight: Optional[int] = Field(default=None, gt=0)
+    weight: Optional[int] = Field(default=None, validate_default=True, gt=0)
     reach_str: Optional[str] = Field(
         default=None,
         exclude=True,
         pattern=r"\d+[.]0\"",
     )
-    reach: Optional[int] = Field(default=None, gt=0)
+    reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
     stance: Optional[str] = None
     wins: int = Field(..., ge=0)
     losses: int = Field(..., ge=0)
