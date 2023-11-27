@@ -1,48 +1,60 @@
-import dataclasses
 import json
 import os
 import re
-from dataclasses import dataclass
+from datetime import date
 from datetime import datetime
 from pathlib import Path
 from sys import exit
+from typing import Optional
+from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import HttpUrl
+from pydantic import computed_field
+from pydantic import model_validator
 
 
-@dataclass
-class ScrapedRow:
-    link: str | None = None
-    name: str | None = None
-    date: str | None = None
-    city: str | None = None
-    state: str | None = None
-    country: str | None = None
+class Location(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_min_length=1, str_strip_whitespace=True)
 
-    def get_location(self) -> dict[str, str] | None:
-        loc_dict = {}
-        for field in ["city", "state", "country"]:
-            val = getattr(self, field)
-            if val is None:
-                continue
-            loc_dict[field] = val
-        return loc_dict if len(loc_dict) > 0 else None
+    location_str: str = Field(..., exclude=True, pattern=r"[^,]+(, [^,]+)?, [^,]+")
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
 
-    location = property(fget=get_location)
+    @model_validator(mode="after")
+    def get_location_parts(self) -> "Location":
+        pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
+        match = re.match(pattern, self.location_str)
+        match = cast(re.Match, match)
 
-    def to_dict(self) -> dict[str, str | dict[str, str]] | None:
-        data_dict = {}
-        for field in ["name", "date", "location"]:
-            val = getattr(self, field)
-            if val is None:
-                continue
-            data_dict[field] = val
-        return data_dict if len(data_dict) > 0 else None
+        for field, val in match.groupdict().items():
+            if isinstance(val, str):
+                setattr(self, field, val.strip())
 
-    def is_non_empty(self) -> bool:
-        return any(getattr(self, field.name) is not None for field in dataclasses.fields(self))
+        return self
+
+
+class ScrapedRow(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_min_length=1, str_strip_whitespace=True)
+
+    link: HttpUrl = Field(..., exclude=True)
+    name: str
+    date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")
+    location: Location
+
+    @computed_field
+    @property
+    def date(self) -> date:
+        try:
+            return datetime.strptime(self.date_str, "%B %d, %Y").date()
+        except ValueError as exc:
+            raise exc
 
 
 class EventsListScraper:
