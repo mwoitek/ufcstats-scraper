@@ -1,3 +1,4 @@
+import argparse
 import sqlite3
 from pathlib import Path
 from sqlite3 import Cursor
@@ -26,10 +27,20 @@ def create_table(table: TableName, cur: Cursor, verbose: bool = False) -> None:
         print(sql_script)
 
 
-if __name__ == "__main__":
+@validate_call
+def setup(verbose: bool = False) -> None:
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
-
         tables: list[TableName] = ["event", "fighter", "fight"]
-        for table in tables:
-            create_table(table, cur)
+        for i, table in enumerate(tables, start=1):
+            create_table(table, cur, verbose)
+            if verbose and i < len(tables):
+                print()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script for setting up the links database.")
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
+
+    args = parser.parse_args()
+    setup(args.verbose)
