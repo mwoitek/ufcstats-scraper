@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_fight_link;
+DROP TABLE IF EXISTS fight;

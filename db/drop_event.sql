@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS idx_event_link;
+DROP TABLE IF EXISTS event;
