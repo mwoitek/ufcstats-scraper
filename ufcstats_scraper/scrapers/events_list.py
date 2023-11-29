@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import re
+import sqlite3
 from collections.abc import Iterator
 from itertools import dropwhile
 from pathlib import Path
@@ -14,6 +15,8 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from db.setup import DB_PATH
+from db.setup import setup as db_setup
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -73,8 +76,7 @@ class ScrapedRow(BaseModel):
 
 class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
-    DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "events_list"
-    LINKS_DIR = Path(__file__).resolve().parents[1] / "data" / "links" / "events"
+    DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "events_list"
 
     def __init__(self) -> None:
         self.failed = False
@@ -188,17 +190,26 @@ class EventsListScraper:
         if not hasattr(self, "scraped_data"):
             return False
 
-        if not (
-            EventsListScraper.LINKS_DIR.exists()
-            and EventsListScraper.LINKS_DIR.is_dir()
-            and os.access(EventsListScraper.LINKS_DIR, os.W_OK)
-        ):
+        try:
+            # Setup links DB. If it already exists, this does nothing.
+            db_setup()
+
+            conn = sqlite3.connect(DB_PATH)
+            cur = conn.cursor()
+        except (FileNotFoundError, ValidationError, sqlite3.Error):
             return False
 
-        out_file = EventsListScraper.LINKS_DIR / "events_list.txt"
-        links = [f"{r.link}\n" for r in self.scraped_data]
-        with open(out_file, mode="w") as links_file:
-            links_file.writelines(links)
+        for scraped_row in self.scraped_data:
+            link = str(scraped_row.link)
+            cur.execute("SELECT id FROM event WHERE link = ?", (link,))
+            if cur.fetchone() is None:
+                cur.execute("INSERT INTO event (link, name) VALUES (?, ?)", (link, scraped_row.name))
+
+        try:
+            conn.commit()
+        except sqlite3.Error:
+            return False
+        conn.close()
 
         return True
 
