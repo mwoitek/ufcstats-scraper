@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import ValidationError
 from pydantic import validate_call
 
-DB_PATH = Path(__file__).resolve().parents[1] / "data" / "links.sqlite"
+DB_PATH = Path(__file__).resolve().parents[2] / "data" / "links.sqlite"
 
 TableName = Literal["event", "fighter", "fight"]
 TABLES: list[TableName] = ["event", "fighter", "fight"]
