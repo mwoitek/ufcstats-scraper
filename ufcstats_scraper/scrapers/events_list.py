@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import json
 import os
@@ -5,6 +6,7 @@ import re
 from collections.abc import Iterator
 from itertools import dropwhile
 from pathlib import Path
+from sys import exit
 from typing import Any
 from typing import Optional
 from typing import cast
@@ -20,6 +22,7 @@ from pydantic import ValidationError
 from pydantic import computed_field
 from pydantic import field_serializer
 from pydantic import model_validator
+from pydantic import validate_call
 
 
 class Location(BaseModel):
@@ -200,6 +203,7 @@ class EventsListScraper:
         return True
 
 
+@validate_call
 def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = False) -> None:
     if not data and not links:
         if verbose:
@@ -236,8 +240,15 @@ def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = 
 
 
 if __name__ == "__main__":
-    # TODO: Improve
-    data = True
-    links = False
-    verbose = True
-    scrape_events_list(data, links, verbose)
+    parser = argparse.ArgumentParser(description="Script for scraping the events list.")
+    parser.add_argument("-d", "--data", action="store_true", dest="data", help="get event data")
+    parser.add_argument("-l", "--links", action="store_true", dest="links", help="get event links")
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
+    args = parser.parse_args()
+
+    try:
+        scrape_events_list(args.data, args.links, args.verbose)
+    except ValidationError as exc:
+        print("ERROR:", end="\n\n")
+        print(exc)
+        exit(1)
