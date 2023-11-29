@@ -1,8 +1,10 @@
 import argparse
 import sqlite3
 from pathlib import Path
+from sys import exit
 from typing import Literal
 
+from pydantic import ValidationError
 from pydantic import validate_call
 
 DB_PATH = Path(__file__).resolve().parents[1] / "data" / "links.sqlite"
@@ -17,11 +19,17 @@ def create_table(table: TableName, verbose: bool = False) -> None:
         print(f'Setting up "{table}" table:', end="\n\n")
 
     sql_script_path = Path(__file__).resolve().parent / f"create_{table}.sql"
-    with open(sql_script_path) as sql_file:
-        sql_script = sql_file.read().rstrip()
+    try:
+        with open(sql_script_path) as sql_file:
+            sql_script = sql_file.read().rstrip()
+    except FileNotFoundError as exc:
+        raise exc
 
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.executescript(sql_script)
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.executescript(sql_script)
+    except sqlite3.Error as exc:
+        raise exc
 
     if verbose:
         print(sql_script)
@@ -33,11 +41,17 @@ def drop_table(table: TableName, verbose: bool = False) -> None:
         print(f'Removing "{table}" table:', end="\n\n")
 
     sql_script_path = Path(__file__).resolve().parent / f"drop_{table}.sql"
-    with open(sql_script_path) as sql_file:
-        sql_script = sql_file.read().rstrip()
+    try:
+        with open(sql_script_path) as sql_file:
+            sql_script = sql_file.read().rstrip()
+    except FileNotFoundError as exc:
+        raise exc
 
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.executescript(sql_script)
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.executescript(sql_script)
+    except sqlite3.Error as exc:
+        raise exc
 
     if verbose:
         print(sql_script)
@@ -46,7 +60,10 @@ def drop_table(table: TableName, verbose: bool = False) -> None:
 @validate_call
 def setup(verbose: bool = False) -> None:
     for i, table in enumerate(TABLES, start=1):
-        create_table(table, verbose)
+        try:
+            create_table(table, verbose)
+        except (FileNotFoundError, ValidationError, sqlite3.Error) as exc:
+            raise exc
         if verbose and i < len(TABLES):
             print()
 
@@ -58,7 +75,10 @@ def reset(verbose: bool = False) -> None:
             print("Links database does not exist. Nothing to reset.", end="\n\n")
         return
     for table in TABLES:
-        drop_table(table, verbose)
+        try:
+            drop_table(table, verbose)
+        except (FileNotFoundError, ValidationError, sqlite3.Error) as exc:
+            raise exc
         if verbose:
             print()
 
@@ -69,6 +89,11 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
-    if args.reset:
-        reset(args.verbose)
-    setup(args.verbose)
+    try:
+        if args.reset:
+            reset(args.verbose)
+        setup(args.verbose)
+    except (FileNotFoundError, ValidationError, sqlite3.Error) as exc:
+        print("ERROR:", end="\n\n")
+        print(exc)
+        exit(1)
