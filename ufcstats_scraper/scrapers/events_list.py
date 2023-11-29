@@ -5,7 +5,6 @@ import re
 from collections.abc import Iterator
 from itertools import dropwhile
 from pathlib import Path
-from sys import exit
 from typing import Any
 from typing import Optional
 from typing import cast
@@ -201,24 +200,44 @@ class EventsListScraper:
         return True
 
 
-if __name__ == "__main__":
-    print("SCRAPING EVENTS LIST", end="\n\n")
+def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = False) -> None:
+    if not data and not links:
+        if verbose:
+            print("Nothing to do.")
+        return
+
+    if verbose:
+        print("SCRAPING EVENTS LIST", end="\n\n")
 
     scraper = EventsListScraper()
     scraper.scrape()
 
     if scraper.failed:
-        print("Failed! No data was scraped.")
-        exit(1)
+        if verbose:
+            print("Failed! No data was scraped.")
+        return
 
-    print(f"Scraped data for {len(scraper.scraped_data)} events.")
+    if verbose:
+        print(f"Scraped data for {len(scraper.scraped_data)} events.")
 
-    print("Saving to JSON...", end=" ")
-    saved = scraper.save_json()
-    msg = "Done!" if saved else "Failed!"
-    print(msg)
+    if data:
+        if verbose:
+            print("Saving to JSON...", end=" ")
+        saved = scraper.save_json()
+        if verbose:
+            print("Done!" if saved else "Failed!")
 
-    print("Saving scraped links...", end=" ")
-    saved = scraper.save_links()
-    msg = "Done!" if saved else "Failed!"
-    print(msg)
+    if links:
+        if verbose:
+            print("Saving scraped links...", end=" ")
+        saved = scraper.save_links()
+        if verbose:
+            print("Done!" if saved else "Failed!")
+
+
+if __name__ == "__main__":
+    # TODO: Improve
+    data = True
+    links = False
+    verbose = True
+    scrape_events_list(data, links, verbose)
