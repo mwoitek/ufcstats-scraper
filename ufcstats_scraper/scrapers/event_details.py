@@ -2,11 +2,13 @@ import argparse
 import re
 import sqlite3
 from sys import exit
+from typing import Any
 from typing import Literal
 from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import Tag
 from db.setup import DB_PATH
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -107,6 +109,51 @@ class EventDetailsScraper:
         html = response.text
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
+
+    def get_table_rows(self) -> Optional[list[Tag]]:
+        if not hasattr(self, "soup"):
+            return
+
+        table_body = self.soup.find("tbody")
+        if not isinstance(table_body, Tag):
+            self.failed = True
+            return
+
+        rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
+        if len(rows) == 0:
+            self.failed = True
+            return
+
+        self.rows = rows
+        return self.rows
+
+    @staticmethod
+    def scrape_row(row: Tag) -> Optional[ScrapedRow]:
+        data_dict: dict[str, Any] = {}
+
+        # Scrape fight link
+        data_dict["fight_link"] = row.get("data-link")
+
+        # Get 2nd column
+        cols = [c for c in row.find_all("td", limit=2) if isinstance(c, Tag)]
+        try:
+            col = cols[1]
+        except IndexError:
+            return
+
+        # Scrape fighter links and names
+        anchors = [a for a in col.find_all("a") if isinstance(a, Tag)]
+        if len(anchors) != 2:
+            return
+
+        for i, anchor in enumerate(anchors, start=1):
+            data_dict[f"fighter_link_{i}"] = anchor.get("href")
+            data_dict[f"fighter_name_{i}"] = anchor.get_text()
+
+        try:
+            return ScrapedRow.model_validate(data_dict)
+        except ValidationError:
+            return
 
 
 if __name__ == "__main__":
