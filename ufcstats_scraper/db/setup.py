@@ -2,15 +2,13 @@ import argparse
 import sqlite3
 from pathlib import Path
 from sys import exit
-from typing import Literal
 
 from pydantic import ValidationError
 from pydantic import validate_call
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "links.sqlite"
-
-TableName = Literal["event", "fighter", "fight"]
-TABLES: list[TableName] = ["event", "fighter", "fight"]
+from ufcstats_scraper.db.config import DB_PATH
+from ufcstats_scraper.db.config import TABLES
+from ufcstats_scraper.db.config import TableName
 
 
 @validate_call
