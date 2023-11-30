@@ -8,7 +8,7 @@ from pydantic import field_validator
 from pydantic.alias_generators import to_camel
 
 
-class ScrapedRow(BaseModel):
+class CustomModel(BaseModel):
     config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
@@ -16,6 +16,8 @@ class ScrapedRow(BaseModel):
         str_strip_whitespace=True,
     )
 
+
+class ScrapedRow(CustomModel):
     fight_link: HttpUrl = Field(..., exclude=True)
     fighter_link_1: HttpUrl = Field(..., exclude=True)
     fighter_name_1: str
@@ -44,3 +46,10 @@ class ScrapedRow(BaseModel):
     @classmethod
     def fix_consecutive_spaces(cls, s: str) -> str:
         return re.sub(r"\s{2,}", " ", s)
+
+
+# NOTE: This model is incomplete by design.
+class EventData(CustomModel):
+    event: str
+    fighter_1: str
+    fighter_2: str
