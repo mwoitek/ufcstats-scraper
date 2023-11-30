@@ -24,7 +24,7 @@ LinkSelection = Literal["all", "failed", "unscraped"]
 
 # TODO: Add error handling
 @validate_call
-def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[str]]:
+def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[tuple[str, str]]]:
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
 
@@ -35,16 +35,16 @@ def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[str]]:
 
         match select:
             case "unscraped":
-                query_2 = "SELECT link FROM event WHERE scraped = 0"
+                query_2 = "SELECT link, name FROM event WHERE scraped = 0"
             case "all":
-                query_2 = "SELECT link FROM event"
+                query_2 = "SELECT link, name FROM event"
             case "failed":
-                query_2 = "SELECT link FROM event WHERE success = 0"
+                query_2 = "SELECT link, name FROM event WHERE success = 0"
 
         cur.execute(query_2)
         results = cur.fetchall()
 
-    return [r[0] for r in results] if len(results) > 0 else None
+    return results if len(results) > 0 else None
 
 
 class CustomModel(BaseModel):
@@ -95,8 +95,9 @@ class EventData(CustomModel):
 
 
 class EventDetailsScraper:
-    def __init__(self, link: str) -> None:
+    def __init__(self, link: str, name: str) -> None:
         self.link = link
+        self.name = name
         self.failed = False
 
     def get_soup(self) -> Optional[BeautifulSoup]:
