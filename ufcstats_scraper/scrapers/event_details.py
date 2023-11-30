@@ -1,7 +1,10 @@
 import argparse
+import json
 import re
 import sqlite3
 from collections.abc import Iterator
+from os import mkdir
+from pathlib import Path
 from sys import exit
 from typing import Any
 from typing import Literal
@@ -97,6 +100,8 @@ class EventData(CustomModel):
 
 
 class EventDetailsScraper:
+    DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "event_details"
+
     def __init__(self, link: str, name: str) -> None:
         self.link = link
         self.name = name
@@ -176,6 +181,33 @@ class EventDetailsScraper:
 
         self.scraped_data = scraped_data
         return self.scraped_data
+
+    def save_json(self) -> bool:
+        if not hasattr(self, "scraped_data"):
+            return False
+
+        try:
+            mkdir(EventDetailsScraper.DATA_DIR, mode=0o755)
+        except FileExistsError:
+            pass
+        except FileNotFoundError:
+            return False
+
+        out_data = []
+        for scraped_row in self.scraped_data:
+            data_dict = {
+                "event": self.name,
+                "fighter_1": scraped_row.fighter_name_1,
+                "fighter_2": scraped_row.fighter_name_2,
+            }
+            out_data.append(EventData.model_validate(data_dict))
+
+        file_name = self.link.split("/")[-1]
+        out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
+        with open(out_file, mode="w") as json_file:
+            json.dump(out_data, json_file, indent=2)
+
+        return True
 
 
 if __name__ == "__main__":
