@@ -5,6 +5,8 @@ from sys import exit
 from typing import Literal
 from typing import Optional
 
+import requests
+from bs4 import BeautifulSoup
 from db.setup import DB_PATH
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -88,6 +90,23 @@ class EventData(CustomModel):
     event: str
     fighter_1: str
     fighter_2: str
+
+
+class EventDetailsScraper:
+    def __init__(self, link: str) -> None:
+        self.link = link
+        self.failed = False
+
+    def get_soup(self) -> Optional[BeautifulSoup]:
+        response = requests.get(self.link)
+
+        if response.status_code != requests.codes["ok"]:
+            self.failed = True
+            return
+
+        html = response.text
+        self.soup = BeautifulSoup(html, "lxml")
+        return self.soup
 
 
 if __name__ == "__main__":
