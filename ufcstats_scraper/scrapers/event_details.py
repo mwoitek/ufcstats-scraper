@@ -1,10 +1,12 @@
 import argparse
 import re
 import sqlite3
+from collections.abc import Iterator
 from sys import exit
 from typing import Any
 from typing import Literal
 from typing import Optional
+from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -155,6 +157,25 @@ class EventDetailsScraper:
             return ScrapedRow.model_validate(data_dict)
         except ValidationError:
             return
+
+    def scrape(self) -> Optional[list[ScrapedRow]]:
+        self.get_soup()
+        self.get_table_rows()
+
+        if not hasattr(self, "rows"):
+            return
+
+        data_iter = map(lambda r: EventDetailsScraper.scrape_row(r), self.rows)
+        data_iter = filter(lambda r: r is not None, data_iter)
+        data_iter = cast(Iterator[ScrapedRow], data_iter)
+
+        scraped_data = list(data_iter)
+        if len(scraped_data) == 0:
+            self.failed = True
+            return
+
+        self.scraped_data = scraped_data
+        return self.scraped_data
 
 
 if __name__ == "__main__":
