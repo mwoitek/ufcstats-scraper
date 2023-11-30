@@ -10,13 +10,15 @@ from ufcstats_scraper.db.config import DB_PATH
 from ufcstats_scraper.db.config import TABLES
 from ufcstats_scraper.db.config import TableName
 
+CURR_DIR = Path(__file__).resolve().parent
+
 
 @validate_call
 def create_table(table: TableName, verbose: bool = False) -> None:
     if verbose:
         print(f'Setting up "{table}" table:', end="\n\n")
 
-    sql_script_path = Path(__file__).resolve().parent / f"create_{table}.sql"
+    sql_script_path = CURR_DIR / f"create_{table}.sql"
     try:
         with open(sql_script_path) as sql_file:
             sql_script = sql_file.read().rstrip()
@@ -38,7 +40,7 @@ def drop_table(table: TableName, verbose: bool = False) -> None:
     if verbose:
         print(f'Removing "{table}" table:', end="\n\n")
 
-    sql_script_path = Path(__file__).resolve().parent / f"drop_{table}.sql"
+    sql_script_path = CURR_DIR / f"drop_{table}.sql"
     try:
         with open(sql_script_path) as sql_file:
             sql_script = sql_file.read().rstrip()
