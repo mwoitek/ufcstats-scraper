@@ -1,5 +1,7 @@
+import argparse
 import re
 import sqlite3
+from sys import exit
 from typing import Literal
 from typing import Optional
 
@@ -8,6 +10,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
+from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import validate_call
 from pydantic.alias_generators import to_camel
@@ -41,7 +44,7 @@ def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[str]]:
 
 
 class CustomModel(BaseModel):
-    config = ConfigDict(
+    model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True,
         str_min_length=1,
@@ -85,3 +88,28 @@ class EventData(CustomModel):
     event: str
     fighter_1: str
     fighter_2: str
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script for scraping event details.")
+    parser.add_argument(
+        "-s",
+        "--scrape",
+        type=str,
+        choices=["all", "failed", "unscraped"],
+        default="unscraped",
+        dest="select",
+        help="filter events to scrape",
+    )
+    args = parser.parse_args()
+
+    try:
+        event_links = get_event_links(args.select)
+    except ValidationError as exc:
+        print("ERROR:", end="\n\n")
+        print(exc)
+        exit(1)
+
+    # TODO: Remove
+    if isinstance(event_links, list):
+        print(event_links[:15])
