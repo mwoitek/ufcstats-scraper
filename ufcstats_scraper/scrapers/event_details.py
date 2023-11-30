@@ -14,7 +14,6 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from db.setup import DB_PATH
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -23,6 +22,8 @@ from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic import validate_call
 from pydantic.alias_generators import to_camel
+
+from ufcstats_scraper.db.setup import DB_PATH
 
 LinkSelection = Literal["all", "failed", "unscraped"]
 

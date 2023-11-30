@@ -15,8 +15,6 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from db.setup import DB_PATH
-from db.setup import setup as db_setup
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -26,6 +24,9 @@ from pydantic import computed_field
 from pydantic import field_serializer
 from pydantic import model_validator
 from pydantic import validate_call
+
+from ufcstats_scraper.db.setup import DB_PATH
+from ufcstats_scraper.db.setup import setup as db_setup
 
 
 class Location(BaseModel):
