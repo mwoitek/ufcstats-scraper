@@ -1,11 +1,43 @@
 import re
+import sqlite3
+from typing import Literal
+from typing import Optional
 
+from db.setup import DB_PATH
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
 from pydantic import field_validator
+from pydantic import validate_call
 from pydantic.alias_generators import to_camel
+
+LinkSelection = Literal["all", "failed", "unscraped"]
+
+
+# TODO: Add error handling
+@validate_call
+def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[str]]:
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.cursor()
+
+        query_1 = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'event'"
+        cur.execute(query_1)
+        if cur.fetchone() is None:
+            return
+
+        match select:
+            case "unscraped":
+                query_2 = "SELECT link FROM event WHERE scraped = 0"
+            case "all":
+                query_2 = "SELECT link FROM event"
+            case "failed":
+                query_2 = "SELECT link FROM event WHERE success = 0"
+
+        cur.execute(query_2)
+        results = cur.fetchall()
+
+    return [r[0] for r in results] if len(results) > 0 else None
 
 
 class CustomModel(BaseModel):
