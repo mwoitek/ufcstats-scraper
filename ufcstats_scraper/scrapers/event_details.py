@@ -7,7 +7,6 @@ from os import mkdir
 from pathlib import Path
 from sys import exit
 from typing import Any
-from typing import Literal
 from typing import Optional
 from typing import cast
 
@@ -20,37 +19,10 @@ from pydantic import Field
 from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import field_validator
-from pydantic import validate_call
 from pydantic.alias_generators import to_camel
 
-from ufcstats_scraper.db.config import DB_PATH
-
-LinkSelection = Literal["all", "failed", "unscraped"]
-
-
-# TODO: Add error handling
-@validate_call
-def get_event_links(select: LinkSelection = "unscraped") -> Optional[list[tuple[str, str]]]:
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-
-        query_1 = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'event'"
-        cur.execute(query_1)
-        if cur.fetchone() is None:
-            return
-
-        match select:
-            case "unscraped":
-                query_2 = "SELECT link, name FROM event WHERE scraped = 0"
-            case "all":
-                query_2 = "SELECT link, name FROM event"
-            case "failed":
-                query_2 = "SELECT link, name FROM event WHERE success = 0"
-
-        cur.execute(query_2)
-        results = cur.fetchall()
-
-    return results if len(results) > 0 else None
+from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.utils import get_events
 
 
 class CustomModel(BaseModel):
@@ -219,18 +191,18 @@ if __name__ == "__main__":
         type=str,
         choices=["all", "failed", "unscraped"],
         default="unscraped",
-        dest="select",
+        dest="links",
         help="filter events to scrape",
     )
     args = parser.parse_args()
 
     try:
-        event_links = get_event_links(args.select)
-    except ValidationError as exc:
+        events = get_events(args.links)
+    except (DBNotSetupError, ValidationError, sqlite3.Error) as exc:
         print("ERROR:", end="\n\n")
         print(exc)
         exit(1)
 
     # TODO: Remove
-    if isinstance(event_links, list):
-        print(event_links[:15])
+    if isinstance(events, list):
+        print(events[:15])
