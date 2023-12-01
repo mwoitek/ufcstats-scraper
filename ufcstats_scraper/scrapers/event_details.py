@@ -2,14 +2,12 @@ import argparse
 import json
 import re
 import sqlite3
-from collections.abc import Iterator
 from os import mkdir
 from pathlib import Path
 from sys import exit
 from typing import Any
 from typing import ClassVar
 from typing import Optional
-from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -26,6 +24,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.utils import get_events
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
@@ -71,7 +70,7 @@ class ScrapedRow(CustomModel):
 
 # NOTE: This model is incomplete by design.
 class EventData(CustomModel):
-    event: str
+    event: Optional[str] = None
     fighter_1: str
     fighter_2: str
 
@@ -122,7 +121,7 @@ class EventDetailsScraper(BaseModel):
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> Optional[ScrapedRow]:
+    def scrape_row(row: Tag) -> ScrapedRow:
         data_dict: dict[str, Any] = {}
 
         # Scrape fight link
@@ -133,12 +132,12 @@ class EventDetailsScraper(BaseModel):
         try:
             col = cols[1]
         except IndexError:
-            return
+            raise MissingHTMLElementError("2nd column (td)") from None
 
         # Scrape fighter links and names
         anchors = [a for a in col.find_all("a") if isinstance(a, Tag)]
         if len(anchors) != 2:
-            return
+            raise MissingHTMLElementError("Anchor tags (a)")
 
         for i, anchor in enumerate(anchors, start=1):
             data_dict[f"fighter_link_{i}"] = anchor.get("href")
@@ -146,54 +145,64 @@ class EventDetailsScraper(BaseModel):
 
         try:
             return ScrapedRow.model_validate(data_dict)
-        except ValidationError:
-            return
+        except ValidationError as exc:
+            raise exc
 
-    def scrape(self) -> Optional[list[ScrapedRow]]:
-        self.get_soup()
-        self.get_table_rows()
+    def scrape(self) -> list[ScrapedRow]:
+        try:
+            self.get_soup()
+            self.get_table_rows()
+        except (MissingHTMLElementError, NoSoupError, RequestException) as exc:
+            raise exc
 
-        if not hasattr(self, "rows"):
-            return
+        scraped_data: list[ScrapedRow] = []
+        for row in self.rows:
+            try:
+                scraped_row = EventDetailsScraper.scrape_row(row)
+            except (MissingHTMLElementError, ValidationError):
+                # TODO: Log error
+                continue
+            scraped_data.append(scraped_row)
 
-        data_iter = map(lambda r: EventDetailsScraper.scrape_row(r), self.rows)
-        data_iter = filter(lambda r: r is not None, data_iter)
-        data_iter = cast(Iterator[ScrapedRow], data_iter)
-
-        scraped_data = list(data_iter)
         if len(scraped_data) == 0:
-            self.failed = True
-            return
+            raise NoScrapedDataError(self.link)
 
         self.scraped_data = scraped_data
         return self.scraped_data
 
-    def save_json(self) -> bool:
+    def save_json(self) -> None:
         if not hasattr(self, "scraped_data"):
-            return False
+            raise NoScrapedDataError
 
         try:
             mkdir(EventDetailsScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
             pass
-        except FileNotFoundError:
-            return False
+        except FileNotFoundError as exc:
+            raise exc
 
-        out_data = []
+        out_data: list[dict[str, Any]] = []
         for scraped_row in self.scraped_data:
-            data_dict = {
-                "event": self.name,
-                "fighter_1": scraped_row.fighter_name_1,
-                "fighter_2": scraped_row.fighter_name_2,
-            }
-            out_data.append(EventData.model_validate(data_dict))
+            try:
+                event = EventData(
+                    event=self.name,
+                    fighter_1=scraped_row.fighter_name_1,
+                    fighter_2=scraped_row.fighter_name_2,
+                )
+            except ValidationError:
+                # TODO: Log error
+                continue
+            json_dict = event.model_dump(by_alias=True, exclude_none=True)
+            out_data.append(json_dict)
 
         file_name = str(self.link).split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
-        with open(out_file, mode="w") as json_file:
-            json.dump(out_data, json_file, indent=2)
 
-        return True
+        try:
+            with open(out_file, mode="w") as json_file:
+                json.dump(out_data, json_file, indent=2)
+        except OSError as exc:
+            raise exc
 
 
 if __name__ == "__main__":
