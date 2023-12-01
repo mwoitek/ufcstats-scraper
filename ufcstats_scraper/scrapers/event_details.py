@@ -7,6 +7,7 @@ from os import mkdir
 from pathlib import Path
 from sys import exit
 from typing import Any
+from typing import ClassVar
 from typing import Optional
 from typing import cast
 
@@ -72,16 +73,17 @@ class EventData(CustomModel):
     fighter_2: str
 
 
-class EventDetailsScraper:
-    DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "event_details"
+class EventDetailsScraper(BaseModel):
+    model_config = ConfigDict(str_min_length=1, str_strip_whitespace=True)
 
-    def __init__(self, link: str, name: str) -> None:
-        self.link = link
-        self.name = name
-        self.failed = False
+    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
+
+    link: HttpUrl
+    name: Optional[str] = None
+    failed: bool = False
 
     def get_soup(self) -> Optional[BeautifulSoup]:
-        response = requests.get(self.link)
+        response = requests.get(str(self.link))
 
         if response.status_code != requests.codes["ok"]:
             self.failed = True
@@ -175,7 +177,7 @@ class EventDetailsScraper:
             }
             out_data.append(EventData.model_validate(data_dict))
 
-        file_name = self.link.split("/")[-1]
+        file_name = str(self.link).split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:
             json.dump(out_data, json_file, indent=2)
