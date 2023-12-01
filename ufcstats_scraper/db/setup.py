@@ -6,9 +6,9 @@ from sys import exit
 from pydantic import ValidationError
 from pydantic import validate_call
 
-from ufcstats_scraper.db.config import DB_PATH
-from ufcstats_scraper.db.config import TABLES
-from ufcstats_scraper.db.config import TableName
+from ufcstats_scraper.db.common import DB_PATH
+from ufcstats_scraper.db.common import TABLES
+from ufcstats_scraper.db.common import TableName
 
 CURR_DIR = Path(__file__).resolve().parent
 
