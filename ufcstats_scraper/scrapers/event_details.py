@@ -21,9 +21,12 @@ from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import field_validator
 from pydantic.alias_generators import to_camel
+from requests.exceptions import RequestException
 
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.utils import get_events
+from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
 class CustomModel(BaseModel):
@@ -80,7 +83,6 @@ class EventDetailsScraper(BaseModel):
 
     link: HttpUrl
     name: Optional[str] = None
-    failed: bool = False
 
     @field_validator("link")
     @classmethod
@@ -91,30 +93,30 @@ class EventDetailsScraper(BaseModel):
             raise ValueError("link has invalid path")
         return link
 
-    def get_soup(self) -> Optional[BeautifulSoup]:
-        response = requests.get(str(self.link))
+    def get_soup(self) -> BeautifulSoup:
+        try:
+            response = requests.get(str(self.link))
+        except RequestException as exc:
+            raise exc
 
         if response.status_code != requests.codes["ok"]:
-            self.failed = True
-            return
+            raise NoSoupError(self.link)
 
         html = response.text
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> Optional[list[Tag]]:
+    def get_table_rows(self) -> list[Tag]:
         if not hasattr(self, "soup"):
-            return
+            raise NoSoupError
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table body (tbody)")
 
         rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
         if len(rows) == 0:
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table rows (tr)")
 
         self.rows = rows
         return self.rows
