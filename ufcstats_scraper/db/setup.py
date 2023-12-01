@@ -1,16 +1,14 @@
 import argparse
 import sqlite3
-from pathlib import Path
 from sys import exit
 
 from pydantic import ValidationError
 from pydantic import validate_call
 
 from ufcstats_scraper.db.common import DB_PATH
+from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
-
-CURR_DIR = Path(__file__).resolve().parent
 
 
 @validate_call
@@ -18,7 +16,7 @@ def create_table(table: TableName, verbose: bool = False) -> None:
     if verbose:
         print(f'Setting up "{table}" table:', end="\n\n")
 
-    sql_script_path = CURR_DIR / f"create_{table}.sql"
+    sql_script_path = SQL_SCRIPTS_DIR / f"create_{table}.sql"
     try:
         with open(sql_script_path) as sql_file:
             sql_script = sql_file.read().rstrip()
@@ -40,7 +38,7 @@ def drop_table(table: TableName, verbose: bool = False) -> None:
     if verbose:
         print(f'Removing "{table}" table:', end="\n\n")
 
-    sql_script_path = CURR_DIR / f"drop_{table}.sql"
+    sql_script_path = SQL_SCRIPTS_DIR / f"drop_{table}.sql"
     try:
         with open(sql_script_path) as sql_file:
             sql_script = sql_file.read().rstrip()
