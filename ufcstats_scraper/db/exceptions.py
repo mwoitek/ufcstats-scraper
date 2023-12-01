@@ -1,0 +1,2 @@
+class DBNotSetupError(Exception):
+    pass
