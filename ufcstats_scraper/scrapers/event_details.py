@@ -82,6 +82,15 @@ class EventDetailsScraper(BaseModel):
     name: Optional[str] = None
     failed: bool = False
 
+    @field_validator("link")
+    @classmethod
+    def check_link(cls, link: HttpUrl) -> HttpUrl:
+        if link.host is None or link.host != "www.ufcstats.com":
+            raise ValueError("link has invalid host")
+        if link.path is None or not link.path.startswith("/event-details/"):
+            raise ValueError("link has invalid path")
+        return link
+
     def get_soup(self) -> Optional[BeautifulSoup]:
         response = requests.get(str(self.link))
 
