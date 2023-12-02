@@ -7,7 +7,7 @@ from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import EventDBData
-from ufcstats_scraper.db.utils import is_db_setup
+from ufcstats_scraper.db.setup import is_db_setup
 
 
 @validate_call
