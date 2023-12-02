@@ -4,8 +4,6 @@ import json
 import os
 import re
 import sqlite3
-from collections.abc import Iterator
-from itertools import dropwhile
 from pathlib import Path
 from sys import exit
 from typing import Any
@@ -16,7 +14,6 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 from pydantic import Field
-from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import computed_field
 from pydantic import field_serializer
@@ -26,7 +23,10 @@ from pydantic import validate_call
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.write import write_events
+from ufcstats_scraper.scrapers.common import EventLink
+from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
+from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
 class Location(CustomModel):
@@ -49,7 +49,7 @@ class Location(CustomModel):
 
 
 class ScrapedRow(CustomModel):
-    link: HttpUrl = Field(..., exclude=True)
+    link: EventLink = Field(..., exclude=True)
     name: str
     date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")
     location: Location
@@ -57,10 +57,7 @@ class ScrapedRow(CustomModel):
     @computed_field
     @property
     def date(self) -> datetime.date:
-        try:
-            return datetime.datetime.strptime(self.date_str, "%B %d, %Y").date()
-        except ValueError as exc:
-            raise exc
+        return datetime.datetime.strptime(self.date_str, "%B %d, %Y").date()
 
     @field_serializer("date")
     def serialize_date(self, date: datetime.date) -> str:
@@ -75,92 +72,75 @@ class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
     DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "events_list"
 
-    def __init__(self) -> None:
-        self.failed = False
-
-    def get_soup(self) -> BeautifulSoup | None:
+    def get_soup(self) -> BeautifulSoup:
         response = requests.get(EventsListScraper.BASE_URL, params={"page": "all"})
 
         if response.status_code != requests.codes["ok"]:
-            self.failed = True
-            return
+            raise NoSoupError(EventsListScraper.BASE_URL)
 
         html = response.text
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> list[Tag] | None:
+    def get_table_rows(self) -> list[Tag]:
         if not hasattr(self, "soup"):
-            return
+            raise NoSoupError
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table body (tbody)")
 
         rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
         if len(rows) == 0:
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table rows (tr)")
 
         self.rows = rows
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> ScrapedRow | None:
+    def scrape_row(row: Tag) -> ScrapedRow:
         cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cols) != 2:
-            return
+            raise MissingHTMLElementError("Row columns (td)")
 
         # Scrape link and name
         anchor = cols[0].find("a")
         if not isinstance(anchor, Tag):
-            return
-
-        link = anchor.get("href")
-        if not isinstance(link, str):
-            return
-
-        data_dict: dict = {
-            "link": link,
+            raise MissingHTMLElementError("Anchor tag (a)")
+        data_dict: dict[str, Any] = {
+            "link": anchor.get("href"),
             "name": anchor.get_text(),
         }
 
         # Scrape date
         date_span = cols[0].find("span")
         if not isinstance(date_span, Tag):
-            return
-
+            raise MissingHTMLElementError("Date span (span)")
         data_dict["date_str"] = date_span.get_text()
 
         # Scrape location
-        try:
-            data_dict["location"] = Location(location_str=cols[1].get_text())
-        except ValidationError:
-            return
+        data_dict["location"] = Location(location_str=cols[1].get_text())
 
-        try:
-            return ScrapedRow.model_validate(data_dict)
-        except ValidationError:
-            return
+        return ScrapedRow.model_validate(data_dict)
 
-    def scrape(self) -> list[ScrapedRow] | None:
+    def scrape(self) -> list[ScrapedRow]:
         self.get_soup()
         self.get_table_rows()
 
-        if not hasattr(self, "rows"):
-            return
-
-        data_iter = map(lambda r: EventsListScraper.scrape_row(r), self.rows)
-        data_iter = filter(lambda r: r is not None, data_iter)
-        data_iter = cast(Iterator[ScrapedRow], data_iter)
+        scraped_data: list[ScrapedRow] = []
         today = datetime.date.today()
-        data_iter = dropwhile(lambda r: r.date > today, data_iter)
 
-        scraped_data = list(data_iter)
+        for row in self.rows:
+            try:
+                scraped_row = EventsListScraper.scrape_row(row)
+            except (MissingHTMLElementError, ValidationError, ValueError):
+                # TODO: Log error
+                continue
+            if scraped_row.date < today:
+                scraped_data.append(scraped_row)
+
         if len(scraped_data) == 0:
-            self.failed = True
-            return
+            raise NoScrapedDataError(EventsListScraper.BASE_URL)
 
         self.scraped_data = scraped_data
         return self.scraped_data
