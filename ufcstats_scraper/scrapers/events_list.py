@@ -1,9 +1,9 @@
 import argparse
 import datetime
 import json
-import os
 import re
 import sqlite3
+from os import mkdir
 from pathlib import Path
 from sys import exit
 from typing import Any
@@ -19,8 +19,10 @@ from pydantic import computed_field
 from pydantic import field_serializer
 from pydantic import model_validator
 from pydantic import validate_call
+from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import no_op
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.write import write_events
 from ufcstats_scraper.scrapers.common import EventLink
@@ -145,23 +147,19 @@ class EventsListScraper:
         self.scraped_data = scraped_data
         return self.scraped_data
 
-    def save_json(self) -> bool:
+    def save_json(self) -> None:
         if not hasattr(self, "scraped_data"):
-            return False
+            raise NoScrapedDataError
 
-        if not (
-            EventsListScraper.DATA_DIR.exists()
-            and EventsListScraper.DATA_DIR.is_dir()
-            and os.access(EventsListScraper.DATA_DIR, os.W_OK)
-        ):
-            return False
+        try:
+            mkdir(EventsListScraper.DATA_DIR, mode=0o755)
+        except FileExistsError:
+            pass
 
-        out_file = EventsListScraper.DATA_DIR / "events_list.json"
         out_data = [r.to_dict() for r in self.scraped_data]
+        out_file = EventsListScraper.DATA_DIR / "events_list.json"
         with open(out_file, mode="w") as json_file:
             json.dump(out_data, json_file, indent=2)
-
-        return True
 
     def update_links_db(self) -> None:
         if not hasattr(self, "scraped_data"):
@@ -171,43 +169,41 @@ class EventsListScraper:
 
 @validate_call
 def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = False) -> None:
-    if not data and not links:
-        if verbose:
-            print("Nothing to do.")
-        return
+    print_func = print if verbose else no_op
+    print_func("SCRAPING EVENTS LIST", end="\n\n")
 
-    if verbose:
-        print("SCRAPING EVENTS LIST", end="\n\n")
+    if not data and not links:
+        print_func("Nothing to do.")
+        return
 
     scraper = EventsListScraper()
-    scraper.scrape()
 
-    if scraper.failed:
-        if verbose:
-            print("Failed! No data was scraped.")
+    try:
+        scraper.scrape()
+    except (MissingHTMLElementError, NoScrapedDataError, NoSoupError, RequestException):
+        # TODO: Log error
+        print_func("Failed! No data was scraped.")
         return
 
-    if verbose:
-        print(f"Scraped data for {len(scraper.scraped_data)} events.")
+    print_func(f"Scraped data for {len(scraper.scraped_data)} events.")
 
     if data:
-        if verbose:
-            print("Saving to JSON...", end=" ")
-        saved = scraper.save_json()
-        if verbose:
-            print("Done!" if saved else "Failed!")
+        print_func("Saving to JSON...", end=" ")
+        try:
+            scraper.save_json()
+            print_func("Done!")
+        except (FileNotFoundError, OSError):
+            # TODO: Log error
+            print_func("Failed!")
 
     if links:
-        if verbose:
-            print("Saving scraped links...", end=" ")
-
+        print_func("Saving scraped links...", end=" ")
         try:
             scraper.update_links_db()
-            if verbose:
-                print("Done!")
-        except (DBNotSetupError, ValidationError, sqlite3.Error):
-            if verbose:
-                print("Failed!")
+            print_func("Done!")
+        except (DBNotSetupError, sqlite3.Error):
+            # TODO: Log error
+            print_func("Failed!")
 
 
 if __name__ == "__main__":
