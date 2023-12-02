@@ -25,8 +25,9 @@ from pydantic import field_serializer
 from pydantic import model_validator
 from pydantic import validate_call
 
-from ufcstats_scraper.db.config import DB_PATH
-from ufcstats_scraper.db.setup import setup as db_setup
+from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.write import write_events
+from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 
 
 class Location(BaseModel):
@@ -37,7 +38,7 @@ class Location(BaseModel):
     state: Optional[str] = None
     country: Optional[str] = None
 
-    @model_validator(mode="after")
+    @model_validator(mode="after")  # pyright: ignore
     def get_location_parts(self) -> "Location":
         pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
         match = re.match(pattern, self.location_str)
@@ -187,32 +188,10 @@ class EventsListScraper:
 
         return True
 
-    def save_links(self) -> bool:
+    def update_links_db(self) -> None:
         if not hasattr(self, "scraped_data"):
-            return False
-
-        try:
-            # Setup links DB. If it already exists, this does nothing.
-            db_setup()
-
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-        except (FileNotFoundError, ValidationError, sqlite3.Error):
-            return False
-
-        for scraped_row in self.scraped_data:
-            link = str(scraped_row.link)
-            cur.execute("SELECT id FROM event WHERE link = ?", (link,))
-            if cur.fetchone() is None:
-                cur.execute("INSERT INTO event (link, name) VALUES (?, ?)", (link, scraped_row.name))
-
-        try:
-            conn.commit()
-        except sqlite3.Error:
-            return False
-        conn.close()
-
-        return True
+            raise NoScrapedDataError
+        write_events(self.scraped_data)
 
 
 @validate_call
@@ -246,9 +225,14 @@ def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = 
     if links:
         if verbose:
             print("Saving scraped links...", end=" ")
-        saved = scraper.save_links()
-        if verbose:
-            print("Done!" if saved else "Failed!")
+
+        try:
+            scraper.update_links_db()
+            if verbose:
+                print("Done!")
+        except (DBNotSetupError, ValidationError, sqlite3.Error):
+            if verbose:
+                print("Failed!")
 
 
 if __name__ == "__main__":
