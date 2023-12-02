@@ -1,10 +1,10 @@
 import argparse
 import json
-import re
 import sqlite3
 from os import mkdir
 from pathlib import Path
 from sys import exit
+from typing import Annotated
 from typing import Any
 from typing import ClassVar
 from typing import Optional
@@ -15,17 +15,20 @@ from bs4 import Tag
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import HttpUrl
 from pydantic import ValidationError
-from pydantic import field_validator
 from pydantic.alias_generators import to_camel
+from pydantic.functional_validators import AfterValidator
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.db.utils import get_events
+from ufcstats_scraper.db.read import read_events
+from ufcstats_scraper.scrapers.common import EventLink
+from ufcstats_scraper.scrapers.common import FighterLink
+from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 
 class CustomModel(BaseModel):
@@ -38,34 +41,11 @@ class CustomModel(BaseModel):
 
 
 class ScrapedRow(CustomModel):
-    fight_link: HttpUrl = Field(..., exclude=True)
-    fighter_link_1: HttpUrl = Field(..., exclude=True)
-    fighter_name_1: str
-    fighter_link_2: HttpUrl = Field(..., exclude=True)
-    fighter_name_2: str
-
-    @field_validator("fight_link")
-    @classmethod
-    def check_fight_link(cls, link: HttpUrl) -> HttpUrl:
-        if link.host is None or link.host != "www.ufcstats.com":
-            raise ValueError("link has invalid host")
-        if link.path is None or not link.path.startswith("/fight-details/"):
-            raise ValueError("link has invalid path")
-        return link
-
-    @field_validator("fighter_link_1", "fighter_link_2")
-    @classmethod
-    def check_fighter_link(cls, link: HttpUrl) -> HttpUrl:
-        if link.host is None or link.host != "www.ufcstats.com":
-            raise ValueError("link has invalid host")
-        if link.path is None or not link.path.startswith("/fighter-details/"):
-            raise ValueError("link has invalid path")
-        return link
-
-    @field_validator("fighter_name_1", "fighter_name_2")
-    @classmethod
-    def fix_consecutive_spaces(cls, s: str) -> str:
-        return re.sub(r"\s{2,}", " ", s)
+    fight_link: FightLink = Field(..., exclude=True)
+    fighter_link_1: FighterLink = Field(..., exclude=True)
+    fighter_name_1: Annotated[str, AfterValidator(fix_consecutive_spaces)]
+    fighter_link_2: FighterLink = Field(..., exclude=True)
+    fighter_name_2: Annotated[str, AfterValidator(fix_consecutive_spaces)]
 
 
 # NOTE: This model is incomplete by design.
@@ -80,17 +60,8 @@ class EventDetailsScraper(BaseModel):
 
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
 
-    link: HttpUrl
+    link: EventLink
     name: Optional[str] = None
-
-    @field_validator("link")
-    @classmethod
-    def check_link(cls, link: HttpUrl) -> HttpUrl:
-        if link.host is None or link.host != "www.ufcstats.com":
-            raise ValueError("link has invalid host")
-        if link.path is None or not link.path.startswith("/event-details/"):
-            raise ValueError("link has invalid path")
-        return link
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -219,7 +190,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        events = get_events(args.links)
+        events = read_events(args.links)
     except (DBNotSetupError, ValidationError, sqlite3.Error) as exc:
         print("ERROR:", end="\n\n")
         print(exc)
