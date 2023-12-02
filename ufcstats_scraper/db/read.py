@@ -11,7 +11,7 @@ from ufcstats_scraper.db.setup import is_db_setup
 
 
 @validate_call
-def get_events(links: LinkSelection = "unscraped") -> Optional[list[EventDBData]]:
+def read_events(links: LinkSelection = "unscraped") -> Optional[list[EventDBData]]:
     if not is_db_setup():
         raise DBNotSetupError
 
@@ -24,13 +24,10 @@ def get_events(links: LinkSelection = "unscraped") -> Optional[list[EventDBData]
         case "all":
             pass
 
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            cur = conn.cursor()
-            cur.execute(query)
-            results = cur.fetchall()
-    except sqlite3.Error as exc:
-        raise exc
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.cursor()
+        cur.execute(query)
+        results = cur.fetchall()
 
     data = []
     for id_, link, name in results:

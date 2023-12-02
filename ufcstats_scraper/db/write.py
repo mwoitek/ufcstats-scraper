@@ -8,7 +8,6 @@ from ufcstats_scraper.db.setup import is_db_setup
 from ufcstats_scraper.scrapers.events_list import ScrapedRow as ScrapedEvent
 
 
-# NOTE: Could also raise sqlite3.Error
 @validate_call
 def write_events(events: list[ScrapedEvent]) -> None:
     if not is_db_setup():
