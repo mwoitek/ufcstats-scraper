@@ -5,14 +5,11 @@ from sys import exit
 from pydantic import ValidationError
 from pydantic import validate_call
 
+from ufcstats_scraper.common import no_op
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
-
-
-def no_op(*args, **kwargs) -> None:
-    _ = args, kwargs
 
 
 @validate_call
