@@ -15,8 +15,6 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
 from pydantic import ValidationError
@@ -25,14 +23,13 @@ from pydantic import field_serializer
 from pydantic import model_validator
 from pydantic import validate_call
 
+from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.write import write_events
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 
 
-class Location(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_min_length=1, str_strip_whitespace=True)
-
+class Location(CustomModel):
     location_str: str = Field(..., exclude=True, pattern=r"[^,]+(, [^,]+)?, [^,]+")
     city: Optional[str] = None
     state: Optional[str] = None
@@ -51,9 +48,7 @@ class Location(BaseModel):
         return self
 
 
-class ScrapedRow(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_min_length=1, str_strip_whitespace=True)
-
+class ScrapedRow(CustomModel):
     link: HttpUrl = Field(..., exclude=True)
     name: str
     date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")

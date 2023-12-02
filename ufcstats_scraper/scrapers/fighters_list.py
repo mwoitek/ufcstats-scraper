@@ -14,8 +14,6 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import HttpUrl
 from pydantic import ValidationError
@@ -23,19 +21,11 @@ from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic import validate_call
-from pydantic.alias_generators import to_camel
+
+from ufcstats_scraper.common import CustomModel
 
 
-class ScrapedRow(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        extra="forbid",
-        populate_by_name=True,
-        regex_engine="python-re",
-        str_min_length=1,
-        str_strip_whitespace=True,
-    )
-
+class ScrapedRow(CustomModel):
     VALID_STANCES: ClassVar[set[str]] = {"Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"}
 
     link: HttpUrl = Field(..., exclude=True)
@@ -137,7 +127,7 @@ class ScrapedRow(BaseModel):
             raise ValueError(f"invalid stance: {stance}")
         return stance
 
-    @model_validator(mode="after")
+    @model_validator(mode="after")  # pyright: ignore
     def check_full_name(self) -> "ScrapedRow":
         first_name = self.first_name
         if first_name is None:

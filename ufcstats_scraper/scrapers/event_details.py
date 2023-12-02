@@ -12,14 +12,12 @@ from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from pydantic import BaseModel
-from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import ValidationError
-from pydantic.alias_generators import to_camel
 from pydantic.functional_validators import AfterValidator
 from requests.exceptions import RequestException
 
+from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.read import read_events
 from ufcstats_scraper.scrapers.common import EventLink
@@ -29,15 +27,6 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
-
-
-class CustomModel(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        str_min_length=1,
-        str_strip_whitespace=True,
-    )
 
 
 class ScrapedRow(CustomModel):
@@ -55,9 +44,7 @@ class EventData(CustomModel):
     fighter_2: str
 
 
-class EventDetailsScraper(BaseModel):
-    model_config = ConfigDict(str_min_length=1, str_strip_whitespace=True)
-
+class EventDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
 
     link: EventLink
