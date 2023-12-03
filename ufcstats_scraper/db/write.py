@@ -6,7 +6,7 @@ from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.setup import is_db_setup
 
 if TYPE_CHECKING:
-    from ufcstats_scraper.scrapers.events_list import ScrapedRow as ScrapedEvent
+    from ufcstats_scraper.scrapers.events_list import ScrapedEvent
 
 
 def write_events(events: list["ScrapedEvent"]) -> None:

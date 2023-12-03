@@ -50,7 +50,7 @@ class Location(CustomModel):
         return self
 
 
-class ScrapedRow(CustomModel):
+class ScrapedEvent(CustomModel):
     link: EventLink = Field(..., exclude=True)
     name: str
     date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")
@@ -100,7 +100,7 @@ class EventsListScraper:
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> ScrapedRow:
+    def scrape_row(row: Tag) -> ScrapedEvent:
         cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cols) != 2:
             raise MissingHTMLElementError("Row columns (td)")
@@ -123,23 +123,23 @@ class EventsListScraper:
         # Scrape location
         data_dict["location"] = Location(location_str=cols[1].get_text())
 
-        return ScrapedRow.model_validate(data_dict)
+        return ScrapedEvent.model_validate(data_dict)
 
-    def scrape(self) -> list[ScrapedRow]:
+    def scrape(self) -> list[ScrapedEvent]:
         self.get_soup()
         self.get_table_rows()
 
-        scraped_data: list[ScrapedRow] = []
+        scraped_data: list[ScrapedEvent] = []
         today = datetime.date.today()
 
         for row in self.rows:
             try:
-                scraped_row = EventsListScraper.scrape_row(row)
+                scraped_event = EventsListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError, ValueError):
                 # TODO: Log error
                 continue
-            if scraped_row.date < today:
-                scraped_data.append(scraped_row)
+            if scraped_event.date < today:
+                scraped_data.append(scraped_event)
 
         if len(scraped_data) == 0:
             raise NoScrapedDataError(EventsListScraper.BASE_URL)
@@ -156,7 +156,7 @@ class EventsListScraper:
         except FileExistsError:
             pass
 
-        out_data = [r.to_dict() for r in self.scraped_data]
+        out_data = [e.to_dict() for e in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
         with open(out_file, mode="w") as json_file:
             json.dump(out_data, json_file, indent=2)
@@ -216,6 +216,6 @@ if __name__ == "__main__":
     try:
         scrape_events_list(args.data, args.links, args.verbose)
     except ValidationError as exc:
-        print("ERROR:", end="\n\n")
+        print("ERROR:")
         print(exc)
         exit(1)
