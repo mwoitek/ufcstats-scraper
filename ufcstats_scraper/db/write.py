@@ -6,6 +6,7 @@ from typing import Optional
 from ufcstats_scraper.db.common import DB_PATH
 
 if TYPE_CHECKING:
+    from ufcstats_scraper.scrapers.event_details import Fighter
     from ufcstats_scraper.scrapers.events_list import ScrapedEvent
 
 
@@ -40,4 +41,17 @@ def update_event(id_: int, tried: bool, success: Optional[bool]) -> None:
     with sqlite3.connect(DB_PATH) as conn:
         cur = conn.cursor()
         cur.execute(query, params)
+        conn.commit()
+
+
+def write_fighters(fighters: set["Fighter"]) -> None:
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.cursor()
+
+        for fighter in fighters:
+            link = str(fighter.link)
+            cur.execute("SELECT id FROM fighter WHERE link = ?", (link,))
+            if cur.fetchone() is None:
+                cur.execute("INSERT INTO fighter (link, name) VALUES (?, ?)", (link, fighter.name))
+
         conn.commit()

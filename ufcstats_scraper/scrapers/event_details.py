@@ -21,6 +21,7 @@ from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.read import read_events
 from ufcstats_scraper.db.setup import is_db_setup
 from ufcstats_scraper.db.write import update_event
+from ufcstats_scraper.db.write import write_fighters
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
@@ -34,12 +35,23 @@ class Fighter(CustomModel):
     link: FighterLink = Field(..., exclude=True)
     name: Annotated[str, AfterValidator(fix_consecutive_spaces)]
 
+    def __hash__(self) -> int:
+        return str(self.link).__hash__()
 
-class ScrapedFight(CustomModel):
+
+class Fight(CustomModel):
     event: str
     link: FightLink = Field(..., exclude=True)
     fighter_1: Fighter
     fighter_2: Fighter
+
+
+def get_unique_fighters(fights: list[Fight]) -> set[Fighter]:
+    fighters: set[Fighter] = set()
+    for fight in fights:
+        fighters.add(fight.fighter_1)
+        fighters.add(fight.fighter_2)
+    return fighters
 
 
 class EventDetailsScraper(CustomModel):
@@ -77,7 +89,7 @@ class EventDetailsScraper(CustomModel):
         self.rows = rows
         return self.rows
 
-    def scrape_row(self, row: Tag) -> ScrapedFight:
+    def scrape_row(self, row: Tag) -> Fight:
         data_dict: dict[str, Any] = {"event": self.name}
 
         # Scrape fight link
@@ -99,29 +111,28 @@ class EventDetailsScraper(CustomModel):
             fighter_dict = {"link": anchor.get("href"), "name": anchor.get_text()}
             data_dict[f"fighter_{i}"] = Fighter.model_validate(fighter_dict)
 
-        return ScrapedFight.model_validate(data_dict)
+        return Fight.model_validate(data_dict)
 
-    def scrape(self) -> list[ScrapedFight]:
+    def scrape(self) -> list[Fight]:
         self.tried = True
         self.success = False
 
         self.get_soup()
         self.get_table_rows()
 
-        scraped_data: list[ScrapedFight] = []
+        scraped_data: list[Fight] = []
         for row in self.rows:
             try:
-                scraped_fight = self.scrape_row(row)
+                fight = self.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 # TODO: Log error
                 continue
-            scraped_data.append(scraped_fight)
+            scraped_data.append(fight)
 
         if len(scraped_data) == 0:
             raise NoScrapedDataError(self.link)
 
         self.success = True
-
         self.scraped_data = scraped_data
         return self.scraped_data
 
@@ -135,8 +146,8 @@ class EventDetailsScraper(CustomModel):
             pass
 
         out_data: list[dict[str, Any]] = []
-        for scraped_fight in self.scraped_data:
-            json_dict = scraped_fight.model_dump(by_alias=True, exclude_none=True)
+        for fight in self.scraped_data:
+            json_dict = fight.model_dump(by_alias=True, exclude_none=True)
             out_data.append(json_dict)
 
         file_name = str(self.link).split("/")[-1]
@@ -156,9 +167,10 @@ class EventDetailsScraper(CustomModel):
         if not self.success:
             return
 
-        # TODO
+        fighters = get_unique_fighters(self.scraped_data)
+        write_fighters(fighters)
 
-        return
+        # TODO: Write fight data to DB
 
 
 if __name__ == "__main__":
@@ -168,13 +180,13 @@ if __name__ == "__main__":
         type=str,
         choices=["all", "failed", "untried"],
         default="untried",
-        dest="links",
+        dest="db",
         help="filter events in the database",
     )
     args = parser.parse_args()
 
     try:
-        events = read_events(args.links)
+        events = read_events(args.db)
     except (DBNotSetupError, sqlite3.Error) as exc:
         print("ERROR:")
         print(exc)
