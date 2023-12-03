@@ -28,26 +28,27 @@ from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 
-class ScrapedRow(CustomModel):
-    fight_link: FightLink = Field(..., exclude=True)
-    fighter_link_1: FighterLink = Field(..., exclude=True)
-    fighter_name_1: Annotated[str, AfterValidator(fix_consecutive_spaces)]
-    fighter_link_2: FighterLink = Field(..., exclude=True)
-    fighter_name_2: Annotated[str, AfterValidator(fix_consecutive_spaces)]
+class Fighter(CustomModel):
+    link: FighterLink = Field(..., exclude=True)
+    name: Annotated[str, AfterValidator(fix_consecutive_spaces)]
 
 
-# NOTE: This model is incomplete by design.
-class EventData(CustomModel):
-    event: Optional[str] = None
-    fighter_1: str
-    fighter_2: str
+class ScrapedFight(CustomModel):
+    event: str
+    link: FightLink = Field(..., exclude=True)
+    fighter_1: Fighter
+    fighter_2: Fighter
 
 
 class EventDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
 
+    id_: int
     link: EventLink
-    name: Optional[str] = None
+    name: str
+
+    tried: bool = False
+    success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
         response = requests.get(str(self.link))
@@ -74,12 +75,11 @@ class EventDetailsScraper(CustomModel):
         self.rows = rows
         return self.rows
 
-    @staticmethod
-    def scrape_row(row: Tag) -> ScrapedRow:
-        data_dict: dict[str, Any] = {}
+    def scrape_row(self, row: Tag) -> ScrapedFight:
+        data_dict: dict[str, Any] = {"event": self.name}
 
         # Scrape fight link
-        data_dict["fight_link"] = row.get("data-link")
+        data_dict["link"] = row.get("data-link")
 
         # Get 2nd column
         cols = [c for c in row.find_all("td", limit=2) if isinstance(c, Tag)]
@@ -94,26 +94,31 @@ class EventDetailsScraper(CustomModel):
             raise MissingHTMLElementError("Anchor tags (a)")
 
         for i, anchor in enumerate(anchors, start=1):
-            data_dict[f"fighter_link_{i}"] = anchor.get("href")
-            data_dict[f"fighter_name_{i}"] = anchor.get_text()
+            fighter_dict = {"link": anchor.get("href"), "name": anchor.get_text()}
+            data_dict[f"fighter_{i}"] = Fighter.model_validate(fighter_dict)
 
-        return ScrapedRow.model_validate(data_dict)
+        return ScrapedFight.model_validate(data_dict)
 
-    def scrape(self) -> list[ScrapedRow]:
+    def scrape(self) -> list[ScrapedFight]:
+        self.tried = True
+        self.success = None
+
         self.get_soup()
         self.get_table_rows()
 
-        scraped_data: list[ScrapedRow] = []
+        scraped_data: list[ScrapedFight] = []
         for row in self.rows:
             try:
-                scraped_row = EventDetailsScraper.scrape_row(row)
+                scraped_fight = self.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 # TODO: Log error
                 continue
-            scraped_data.append(scraped_row)
+            scraped_data.append(scraped_fight)
 
         if len(scraped_data) == 0:
             raise NoScrapedDataError(self.link)
+
+        self.success = True
 
         self.scraped_data = scraped_data
         return self.scraped_data
@@ -128,17 +133,8 @@ class EventDetailsScraper(CustomModel):
             pass
 
         out_data: list[dict[str, Any]] = []
-        for scraped_row in self.scraped_data:
-            try:
-                event = EventData(
-                    event=self.name,
-                    fighter_1=scraped_row.fighter_name_1,
-                    fighter_2=scraped_row.fighter_name_2,
-                )
-            except ValidationError:
-                # TODO: Log error
-                continue
-            json_dict = event.model_dump(by_alias=True, exclude_none=True)
+        for scraped_fight in self.scraped_data:
+            json_dict = scraped_fight.model_dump(by_alias=True, exclude_none=True)
             out_data.append(json_dict)
 
         file_name = str(self.link).split("/")[-1]
@@ -146,14 +142,18 @@ class EventDetailsScraper(CustomModel):
         with open(out_file, mode="w") as json_file:
             json.dump(out_data, json_file, indent=2)
 
+    def update_links_db(self) -> None:
+        # TODO
+        return
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script for scraping event details.")
     parser.add_argument(
         "--db",
         type=str,
-        choices=["all", "failed", "unscraped"],
-        default="unscraped",
+        choices=["all", "failed", "untried"],
+        default="untried",
         dest="links",
         help="filter events in the database",
     )
