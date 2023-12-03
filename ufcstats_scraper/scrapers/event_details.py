@@ -19,6 +19,8 @@ from pydantic.functional_validators import AfterValidator
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.read import read_events
+from ufcstats_scraper.db.setup import is_db_setup
+from ufcstats_scraper.db.write import update_event
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
@@ -101,7 +103,7 @@ class EventDetailsScraper(CustomModel):
 
     def scrape(self) -> list[ScrapedFight]:
         self.tried = True
-        self.success = None
+        self.success = False
 
         self.get_soup()
         self.get_table_rows()
@@ -143,7 +145,19 @@ class EventDetailsScraper(CustomModel):
             json.dump(out_data, json_file, indent=2)
 
     def update_links_db(self) -> None:
+        if not self.tried:
+            return
+
+        if not is_db_setup():
+            raise DBNotSetupError
+
+        update_event(self.id_, self.tried, self.success)
+
+        if not self.success:
+            return
+
         # TODO
+
         return
 
 
