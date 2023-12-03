@@ -15,7 +15,6 @@ from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic.functional_validators import AfterValidator
-from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -51,10 +50,7 @@ class EventDetailsScraper(CustomModel):
     name: Optional[str] = None
 
     def get_soup(self) -> BeautifulSoup:
-        try:
-            response = requests.get(str(self.link))
-        except RequestException as exc:
-            raise exc
+        response = requests.get(str(self.link))
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(self.link)
@@ -101,17 +97,11 @@ class EventDetailsScraper(CustomModel):
             data_dict[f"fighter_link_{i}"] = anchor.get("href")
             data_dict[f"fighter_name_{i}"] = anchor.get_text()
 
-        try:
-            return ScrapedRow.model_validate(data_dict)
-        except ValidationError as exc:
-            raise exc
+        return ScrapedRow.model_validate(data_dict)
 
     def scrape(self) -> list[ScrapedRow]:
-        try:
-            self.get_soup()
-            self.get_table_rows()
-        except (MissingHTMLElementError, NoSoupError, RequestException) as exc:
-            raise exc
+        self.get_soup()
+        self.get_table_rows()
 
         scraped_data: list[ScrapedRow] = []
         for row in self.rows:
@@ -136,8 +126,6 @@ class EventDetailsScraper(CustomModel):
             mkdir(EventDetailsScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
             pass
-        except FileNotFoundError as exc:
-            raise exc
 
         out_data: list[dict[str, Any]] = []
         for scraped_row in self.scraped_data:
@@ -155,31 +143,26 @@ class EventDetailsScraper(CustomModel):
 
         file_name = str(self.link).split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
-
-        try:
-            with open(out_file, mode="w") as json_file:
-                json.dump(out_data, json_file, indent=2)
-        except OSError as exc:
-            raise exc
+        with open(out_file, mode="w") as json_file:
+            json.dump(out_data, json_file, indent=2)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Script for scraping event details.")
     parser.add_argument(
-        "-s",
-        "--scrape",
+        "--db",
         type=str,
         choices=["all", "failed", "unscraped"],
         default="unscraped",
         dest="links",
-        help="filter events to scrape",
+        help="filter events in the database",
     )
     args = parser.parse_args()
 
     try:
         events = read_events(args.links)
-    except (DBNotSetupError, ValidationError, sqlite3.Error) as exc:
-        print("ERROR:", end="\n\n")
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        print("ERROR:")
         print(exc)
         exit(1)
 
