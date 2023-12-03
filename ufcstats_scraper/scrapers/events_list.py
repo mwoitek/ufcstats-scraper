@@ -24,6 +24,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import no_op
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.setup import is_db_setup
 from ufcstats_scraper.db.write import write_events
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
@@ -164,6 +165,10 @@ class EventsListScraper:
     def update_links_db(self) -> None:
         if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
+
+        if not is_db_setup():
+            raise DBNotSetupError
+
         write_events(self.scraped_data)
 
 
