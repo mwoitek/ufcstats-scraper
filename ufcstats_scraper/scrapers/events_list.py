@@ -1,13 +1,16 @@
-import argparse
 import datetime
-import json
 import re
 import sqlite3
+from argparse import ArgumentParser
+from contextlib import redirect_stdout
+from json import dump
 from os import mkdir
 from pathlib import Path
 from sys import exit
+from sys import stdout
 from typing import Any
 from typing import Optional
+from typing import Self
 from typing import cast
 
 import requests
@@ -22,10 +25,8 @@ from pydantic import validate_call
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
-from ufcstats_scraper.common import no_op
+from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.db.setup import is_db_setup
-from ufcstats_scraper.db.write import write_events
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
@@ -38,8 +39,8 @@ class Location(CustomModel):
     state: Optional[str] = None
     country: Optional[str] = None
 
-    @model_validator(mode="after")  # pyright: ignore
-    def get_location_parts(self) -> "Location":
+    @model_validator(mode="after")
+    def get_location_parts(self) -> Self:
         pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
         match = re.match(pattern, self.location_str)
         match = cast(re.Match, match)
@@ -51,7 +52,7 @@ class Location(CustomModel):
         return self
 
 
-class ScrapedEvent(CustomModel):
+class Event(CustomModel):
     link: EventLink = Field(..., exclude=True)
     name: str
     date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")
@@ -101,7 +102,7 @@ class EventsListScraper:
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> ScrapedEvent:
+    def scrape_row(row: Tag) -> Event:
         cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cols) != 2:
             raise MissingHTMLElementError("Row columns (td)")
@@ -110,10 +111,7 @@ class EventsListScraper:
         anchor = cols[0].find("a")
         if not isinstance(anchor, Tag):
             raise MissingHTMLElementError("Anchor tag (a)")
-        data_dict: dict[str, Any] = {
-            "link": anchor.get("href"),
-            "name": anchor.get_text(),
-        }
+        data_dict: dict[str, Any] = {"link": anchor.get("href"), "name": anchor.get_text()}
 
         # Scrape date
         date_span = cols[0].find("span")
@@ -124,23 +122,23 @@ class EventsListScraper:
         # Scrape location
         data_dict["location"] = Location(location_str=cols[1].get_text())
 
-        return ScrapedEvent.model_validate(data_dict)
+        return Event.model_validate(data_dict)
 
-    def scrape(self) -> list[ScrapedEvent]:
+    def scrape(self) -> list[Event]:
         self.get_soup()
         self.get_table_rows()
 
-        scraped_data: list[ScrapedEvent] = []
+        scraped_data: list[Event] = []
         today = datetime.date.today()
 
         for row in self.rows:
             try:
-                scraped_event = EventsListScraper.scrape_row(row)
+                event = EventsListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError, ValueError):
                 # TODO: Log error
                 continue
-            if scraped_event.date < today:
-                scraped_data.append(scraped_event)
+            if event.date < today:
+                scraped_data.append(event)
 
         if len(scraped_data) == 0:
             raise NoScrapedDataError(EventsListScraper.BASE_URL)
@@ -160,25 +158,20 @@ class EventsListScraper:
         out_data = [e.to_dict() for e in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
         with open(out_file, mode="w") as json_file:
-            json.dump(out_data, json_file, indent=2)
+            dump(out_data, json_file, indent=2)
 
-    def update_links_db(self) -> None:
+    def update_links_db(self, db: LinksDB) -> None:
         if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
-
-        if not is_db_setup():
-            raise DBNotSetupError
-
-        write_events(self.scraped_data)
+        db.insert_events(self.scraped_data)
 
 
 @validate_call
-def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = False) -> None:
-    print_func = print if verbose else no_op
-    print_func("SCRAPING EVENTS LIST", end="\n\n")
+def scrape_events_list(data: bool = False, links: bool = False) -> None:
+    print("SCRAPING EVENTS LIST", end="\n\n")
 
     if not data and not links:
-        print_func("Nothing to do.")
+        print("Nothing to do.")
         return
 
     scraper = EventsListScraper()
@@ -187,39 +180,41 @@ def scrape_events_list(data: bool = False, links: bool = False, verbose: bool = 
         scraper.scrape()
     except (MissingHTMLElementError, NoScrapedDataError, NoSoupError, RequestException):
         # TODO: Log error
-        print_func("Failed! No data was scraped.")
+        print("Failed! No data was scraped.")
         return
 
-    print_func(f"Scraped data for {len(scraper.scraped_data)} events.")
+    print(f"Scraped data for {len(scraper.scraped_data)} events.")
 
     if data:
-        print_func("Saving to JSON...", end=" ")
+        print("Saving to JSON...", end=" ")
         try:
             scraper.save_json()
-            print_func("Done!")
+            print("Done!")
         except (FileNotFoundError, OSError):
             # TODO: Log error
-            print_func("Failed!")
+            print("Failed!")
 
     if links:
-        print_func("Saving scraped links...", end=" ")
+        print("Saving scraped links...", end=" ")
         try:
-            scraper.update_links_db()
-            print_func("Done!")
+            with LinksDB() as db:
+                scraper.update_links_db(db)
+            print("Done!")
         except (DBNotSetupError, sqlite3.Error):
             # TODO: Log error
-            print_func("Failed!")
+            print("Failed!")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script for scraping the events list.")
+    parser = ArgumentParser(description="Script for scraping the events list.")
     parser.add_argument("-d", "--data", action="store_true", dest="data", help="get event data")
     parser.add_argument("-l", "--links", action="store_true", dest="links", help="get event links")
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
     try:
-        scrape_events_list(args.data, args.links, args.verbose)
+        with redirect_stdout(stdout if args.verbose else None):
+            scrape_events_list(args.data, args.links)
     except ValidationError as exc:
         print("ERROR:")
         print(exc)
