@@ -1,10 +1,25 @@
 import sqlite3
+from datetime import datetime
 from typing import Any
 from typing import Self
+
+from pydantic import HttpUrl
 
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+
+
+def adapt_url(url: HttpUrl) -> str:
+    return str(url)
+
+
+def adapt_datetime(dt: datetime) -> str:
+    return dt.isoformat(sep=" ").split(".")[0]
+
+
+sqlite3.register_adapter(HttpUrl, adapt_url)
+sqlite3.register_adapter(datetime, adapt_datetime)
 
 
 def is_db_setup() -> bool:
