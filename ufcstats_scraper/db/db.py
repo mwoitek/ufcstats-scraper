@@ -1,5 +1,7 @@
 import sqlite3
+from collections.abc import Iterable
 from datetime import datetime
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Self
 
@@ -7,7 +9,11 @@ from pydantic import AnyUrl
 
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import TABLES
+from ufcstats_scraper.db.common import TableName
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+
+if TYPE_CHECKING:
+    from ufcstats_scraper.scrapers.events_list import Event
 
 
 def adapt_url(url: AnyUrl) -> str:
@@ -63,3 +69,14 @@ class LinksDB:
     def __exit__(self, *exc: Any) -> bool:
         self.close()
         return False
+
+    def link_exists(self, table: TableName, link: AnyUrl) -> bool:
+        query = f"SELECT id FROM {table} WHERE link = :link"
+        self.cur.execute(query, {"link": link})
+        return self.cur.fetchone() is not None
+
+    def insert_events(self, events: Iterable["Event"]) -> None:
+        query = "INSERT INTO event (link, name) VALUES (:link, :name)"
+        new_events = filter(lambda e: not self.link_exists("event", e.link), events)
+        for event in new_events:
+            self.cur.execute(query, {"link": event.link, "name": event.name})
