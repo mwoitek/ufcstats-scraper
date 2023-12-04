@@ -1,5 +1,5 @@
-import argparse
 import sqlite3
+from argparse import ArgumentParser
 from contextlib import redirect_stdout
 from sys import exit
 from sys import stdout
@@ -8,23 +8,6 @@ from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
-
-
-# TODO: Move elsewhere
-def is_db_setup() -> bool:
-    if not DB_PATH.exists():
-        return False
-
-    table_names = map(lambda n: f"'{n}'", TABLES)
-    tables_list = "(" + ", ".join(table_names) + ")"
-    query = f"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN {tables_list}"
-
-    with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        cur.execute(query)
-        results = cur.fetchall()
-
-    return len(results) == len(TABLES)
 
 
 class DBCreator:
@@ -66,7 +49,7 @@ class DBCreator:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script for setting up the links database.")
+    parser = ArgumentParser(description="Script for setting up the links database.")
     parser.add_argument("-r", "--reset", action="store_true", dest="reset", help="reset links database")
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
