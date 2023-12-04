@@ -1,47 +1,16 @@
 import argparse
 import sqlite3
+from contextlib import redirect_stdout
 from sys import exit
+from sys import stdout
 
-from pydantic import ValidationError
-from pydantic import validate_call
-
-from ufcstats_scraper.common import no_op
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
 
 
-@validate_call
-def create_table(table: TableName, verbose: bool = False) -> None:
-    print_func = print if verbose else no_op
-    print_func(f'Setting up "{table}" table:', end="\n\n")
-
-    sql_script_path = SQL_SCRIPTS_DIR / f"create_{table}.sql"
-    with open(sql_script_path) as sql_file:
-        sql_script = sql_file.read().rstrip()
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.executescript(sql_script)
-
-    print_func(sql_script)
-
-
-@validate_call
-def drop_table(table: TableName, verbose: bool = False) -> None:
-    print_func = print if verbose else no_op
-    print_func(f'Removing "{table}" table:', end="\n\n")
-
-    sql_script_path = SQL_SCRIPTS_DIR / f"drop_{table}.sql"
-    with open(sql_script_path) as sql_file:
-        sql_script = sql_file.read().rstrip()
-
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.executescript(sql_script)
-
-    print_func(sql_script)
-
-
+# TODO: Move elsewhere
 def is_db_setup() -> bool:
     if not DB_PATH.exists():
         return False
@@ -58,31 +27,42 @@ def is_db_setup() -> bool:
     return len(results) == len(TABLES)
 
 
-@validate_call
-def setup(verbose: bool = False) -> None:
-    print_func = print if verbose else no_op
+class DBCreator:
+    def __init__(self) -> None:
+        self.conn = sqlite3.connect(DB_PATH)
+        self.cur = self.conn.cursor()
 
-    if is_db_setup():
-        print_func("Links database is already setup. Nothing to do.")
-        return
+    def __del__(self) -> None:
+        self.conn.close()
 
-    for i, table in enumerate(TABLES, start=1):
-        create_table(table, verbose)
-        if i < len(TABLES):
-            print_func()
+    @staticmethod
+    def read_sql_script(script_name: str) -> str:
+        script_path = SQL_SCRIPTS_DIR / script_name
+        with open(script_path) as sql_file:
+            return sql_file.read().rstrip()
 
+    def create_table(self, table: TableName) -> None:
+        print(f'Setting up "{table}" table:', end="\n\n")
+        sql_script = DBCreator.read_sql_script(f"create_{table}.sql")
+        self.cur.executescript(sql_script)
+        print(sql_script)
 
-@validate_call
-def reset(verbose: bool = False) -> None:
-    print_func = print if verbose else no_op
+    def drop_table(self, table: TableName) -> None:
+        print(f'Removing "{table}" table:', end="\n\n")
+        sql_script = DBCreator.read_sql_script(f"drop_{table}.sql")
+        self.cur.executescript(sql_script)
+        print(sql_script)
 
-    if not DB_PATH.exists():
-        print_func("Links database does not exist. Nothing to reset.", end="\n\n")
-        return
+    def create(self) -> None:
+        for i, table in enumerate(TABLES, start=1):
+            self.create_table(table)
+            if i < len(TABLES):
+                print()
 
-    for table in TABLES:
-        drop_table(table, verbose)
-        print_func()
+    def drop(self) -> None:
+        for table in TABLES:
+            self.drop_table(table)
+            print()
 
 
 if __name__ == "__main__":
@@ -92,10 +72,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        if args.reset:
-            reset(args.verbose)
-        setup(args.verbose)
-    except (FileNotFoundError, ValidationError, sqlite3.Error) as exc:
-        print("ERROR:", end="\n\n")
+        creator = DBCreator()
+        with redirect_stdout(stdout if args.verbose else None):
+            if args.reset:
+                creator.drop()
+            creator.create()
+    except (FileNotFoundError, sqlite3.Error) as exc:
+        print("ERROR:")
         print(exc)
         exit(1)
