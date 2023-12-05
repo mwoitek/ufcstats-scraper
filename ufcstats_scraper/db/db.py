@@ -65,22 +65,14 @@ class LinksDB:
         self.conn = sqlite3.connect(DB_PATH)
         self.cur = self.conn.cursor()
 
-    def close(self) -> None:
-        # In case DB is already closed
-        try:
-            self.conn.commit()
-        except sqlite3.ProgrammingError:
-            pass
-        self.conn.close()
-
     def __del__(self) -> None:
-        self.close()
+        self.conn.close()
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: Any) -> bool:
-        self.close()
+        self.conn.close()
         return False
 
     def link_exists(self, table: TableName, link: AnyUrl) -> bool:
@@ -93,12 +85,14 @@ class LinksDB:
         new_events = filter(lambda e: not self.link_exists("event", e.link), events)
         for event in new_events:
             self.cur.execute(query, {"link": event.link, "name": event.name})
+        self.conn.commit()
 
     def insert_fighters(self, fighters: Iterable["Fighter"]) -> None:
         query = "INSERT INTO fighter (link, name) VALUES (:link, :name)"
         new_fighters = filter(lambda f: not self.link_exists("fighter", f.link), fighters)
         for fighter in new_fighters:
             self.cur.execute(query, {"link": fighter.link, "name": fighter.name})
+        self.conn.commit()
 
     def insert_fights(self, fights: Iterable["Fight"]) -> None:
         fighters = get_unique_fighters(fights)
@@ -118,6 +112,7 @@ class LinksDB:
                 "fighter_2_id": fighter_ids[fight.fighter_2],
             }
             self.cur.execute(query, params)
+        self.conn.commit()
 
     def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
         query = "SELECT id, link, name FROM event"
@@ -146,3 +141,4 @@ class LinksDB:
         query = "UPDATE event SET updated_at = :updated_at, tried = :tried, success = :success WHERE id = :id"
         params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
         self.cur.execute(query, params)
+        self.conn.commit()
