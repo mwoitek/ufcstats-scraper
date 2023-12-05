@@ -1,8 +1,7 @@
-from pydantic import BaseModel
-from pydantic import HttpUrl
+from typing import NamedTuple
 
 
-class EventDBData(BaseModel):
-    id_: int
-    link: HttpUrl
+class DBEvent(NamedTuple):
+    id: int
+    link: str
     name: str
