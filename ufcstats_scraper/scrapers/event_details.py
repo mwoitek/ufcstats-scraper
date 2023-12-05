@@ -1,6 +1,5 @@
 import sqlite3
 from argparse import ArgumentParser
-from collections.abc import Iterable
 from json import dump
 from os import mkdir
 from pathlib import Path
@@ -50,14 +49,6 @@ class Fight(CustomModel):
         data_dict["fighter1"] = data_dict.pop("fighter1").get("name")
         data_dict["fighter2"] = data_dict.pop("fighter2").get("name")
         return data_dict
-
-
-def get_unique_fighters(fights: Iterable[Fight]) -> set[Fighter]:
-    fighters: set[Fighter] = set()
-    for fight in fights:
-        fighters.add(fight.fighter_1)
-        fighters.add(fight.fighter_2)
-    return fighters
 
 
 class EventDetailsScraper(CustomModel):
@@ -160,16 +151,10 @@ class EventDetailsScraper(CustomModel):
     def update_links_db(self, db: LinksDB) -> None:
         if not self.tried:
             return
-
         db.update_event(self.id, self.tried, self.success)
-
         if not self.success:
             return
-
-        fighters = get_unique_fighters(self.scraped_data)
-        db.insert_fighters(fighters)
-
-        # TODO: Write fight data to DB
+        db.insert_fights(self.scraped_data)
 
 
 if __name__ == "__main__":
