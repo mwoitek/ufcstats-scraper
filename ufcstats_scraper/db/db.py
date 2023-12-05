@@ -16,6 +16,7 @@ from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
 
 if TYPE_CHECKING:
+    from ufcstats_scraper.scrapers.event_details import Fight
     from ufcstats_scraper.scrapers.event_details import Fighter
     from ufcstats_scraper.scrapers.events_list import Event
 
@@ -46,6 +47,14 @@ def is_db_setup() -> bool:
         results = cur.fetchall()
 
     return len(results) == len(TABLES)
+
+
+def get_unique_fighters(fights: Iterable["Fight"]) -> set["Fighter"]:
+    fighters: set["Fighter"] = set()
+    for fight in fights:
+        fighters.add(fight.fighter_1)
+        fighters.add(fight.fighter_2)
+    return fighters
 
 
 class LinksDB:
@@ -91,6 +100,25 @@ class LinksDB:
         for fighter in new_fighters:
             self.cur.execute(query, {"link": fighter.link, "name": fighter.name})
 
+    def insert_fights(self, fights: Iterable["Fight"]) -> None:
+        fighters = get_unique_fighters(fights)
+        self.insert_fighters(fighters)
+        fighter_ids = self.read_fighter_ids(fighters)
+
+        query = (
+            "INSERT INTO fight (link, event_id, fighter_1_id, fighter_2_id) "
+            "VALUES (:link, :event_id, :fighter_1_id, :fighter_2_id)"
+        )
+        new_fights = filter(lambda f: not self.link_exists("fight", f.link), fights)
+        for fight in new_fights:
+            params = {
+                "link": fight.link,
+                "event_id": fight.event_id,
+                "fighter_1_id": fighter_ids[fight.fighter_1],
+                "fighter_2_id": fighter_ids[fight.fighter_2],
+            }
+            self.cur.execute(query, params)
+
     def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
         query = "SELECT id, link, name FROM event"
         match select:
@@ -101,6 +129,18 @@ class LinksDB:
             case "all":
                 pass
         return [DBEvent(*row) for row in self.cur.execute(query)]
+
+    def read_fighter_ids(self, fighters: Iterable["Fighter"]) -> dict["Fighter", int]:
+        fighter_ids: dict["Fighter", int] = {}
+        query = "SELECT id FROM fighter WHERE link = :link"
+
+        for fighter in fighters:
+            self.cur.execute(query, {"link": fighter.link})
+            result = self.cur.fetchone()
+            if isinstance(result, tuple):
+                fighter_ids[fighter] = result[0]
+
+        return fighter_ids
 
     def update_event(self, id: int, tried: bool, success: Optional[bool]) -> None:
         query = "UPDATE event SET updated_at = :updated_at, tried = :tried, success = :success WHERE id = :id"
