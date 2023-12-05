@@ -44,6 +44,13 @@ class Fight(CustomModel):
     fighter_1: Fighter
     fighter_2: Fighter
 
+    def to_dict(self) -> dict[str, Any]:
+        data_dict = self.model_dump(by_alias=True, exclude_none=True)
+        data_dict["event"] = data_dict.pop("eventName")
+        data_dict["fighter1"] = data_dict.pop("fighter1").get("name")
+        data_dict["fighter2"] = data_dict.pop("fighter2").get("name")
+        return data_dict
+
 
 def get_unique_fighters(fights: Iterable[Fight]) -> set[Fighter]:
     fighters: set[Fighter] = set()
@@ -144,7 +151,7 @@ class EventDetailsScraper(CustomModel):
         except FileExistsError:
             pass
 
-        out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in self.scraped_data]
+        out_data = [f.to_dict() for f in self.scraped_data]
         file_name = str(self.link).split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:
