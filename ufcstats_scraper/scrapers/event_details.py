@@ -1,6 +1,7 @@
-import argparse
-import json
 import sqlite3
+from argparse import ArgumentParser
+from collections.abc import Iterable
+from json import dump
 from os import mkdir
 from pathlib import Path
 from sys import exit
@@ -17,11 +18,8 @@ from pydantic import ValidationError
 from pydantic.functional_validators import AfterValidator
 
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.db.read import read_events
-from ufcstats_scraper.db.setup import is_db_setup
-from ufcstats_scraper.db.write import update_event
-from ufcstats_scraper.db.write import write_fighters
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
@@ -40,13 +38,14 @@ class Fighter(CustomModel):
 
 
 class Fight(CustomModel):
-    event: str
+    event_id: int = Field(..., exclude=True)
+    event_name: str
     link: FightLink = Field(..., exclude=True)
     fighter_1: Fighter
     fighter_2: Fighter
 
 
-def get_unique_fighters(fights: list[Fight]) -> set[Fighter]:
+def get_unique_fighters(fights: Iterable[Fight]) -> set[Fighter]:
     fighters: set[Fighter] = set()
     for fight in fights:
         fighters.add(fight.fighter_1)
@@ -57,7 +56,7 @@ def get_unique_fighters(fights: list[Fight]) -> set[Fighter]:
 class EventDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
 
-    id_: int
+    id: int
     link: EventLink
     name: str
 
@@ -90,7 +89,7 @@ class EventDetailsScraper(CustomModel):
         return self.rows
 
     def scrape_row(self, row: Tag) -> Fight:
-        data_dict: dict[str, Any] = {"event": self.name}
+        data_dict: dict[str, Any] = {"event_id": self.id, "event_name": self.name}
 
         # Scrape fight link
         data_dict["link"] = row.get("data-link")
@@ -145,53 +144,45 @@ class EventDetailsScraper(CustomModel):
         except FileExistsError:
             pass
 
-        out_data: list[dict[str, Any]] = []
-        for fight in self.scraped_data:
-            json_dict = fight.model_dump(by_alias=True, exclude_none=True)
-            out_data.append(json_dict)
-
+        out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in self.scraped_data]
         file_name = str(self.link).split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:
-            json.dump(out_data, json_file, indent=2)
+            dump(out_data, json_file, indent=2)
 
-    def update_links_db(self) -> None:
+    def update_links_db(self, db: LinksDB) -> None:
         if not self.tried:
             return
 
-        if not is_db_setup():
-            raise DBNotSetupError
-
-        update_event(self.id_, self.tried, self.success)
+        db.update_event(self.id, self.tried, self.success)
 
         if not self.success:
             return
 
         fighters = get_unique_fighters(self.scraped_data)
-        write_fighters(fighters)
+        db.insert_fighters(fighters)
 
         # TODO: Write fight data to DB
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script for scraping event details.")
+    parser = ArgumentParser(description="Script for scraping event details.")
     parser.add_argument(
-        "--db",
+        "-f",
+        "--filter",
         type=str,
         choices=["all", "failed", "untried"],
         default="untried",
-        dest="db",
+        dest="select",
         help="filter events in the database",
     )
     args = parser.parse_args()
 
     try:
-        events = read_events(args.db)
+        with LinksDB() as db:
+            events = db.read_events(args.select)
+            print(events[:15])
     except (DBNotSetupError, sqlite3.Error) as exc:
         print("ERROR:")
         print(exc)
         exit(1)
-
-    # TODO: Remove
-    if isinstance(events, list):
-        print(events[:15])
