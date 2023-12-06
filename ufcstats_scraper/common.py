@@ -5,13 +5,15 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
+LOG_DIR = Path(__file__).resolve().parent / "log"
+
 
 class CustomLogger:
-    def __init__(self, name: str, file_path: str | Path) -> None:
+    def __init__(self, name: str, file_name: str) -> None:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
 
-        self.handler = logging.FileHandler(file_path)
+        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log")
         self.handler.setLevel(logging.DEBUG)
 
         formatter = logging.Formatter(
