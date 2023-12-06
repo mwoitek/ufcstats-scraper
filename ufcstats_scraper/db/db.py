@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 from typing import Self
 
 from pydantic import AnyUrl
@@ -42,9 +41,7 @@ def is_db_setup() -> bool:
     query = f"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN {tables_list}"
 
     with sqlite3.connect(DB_PATH) as conn:
-        cur = conn.cursor()
-        cur.execute(query)
-        results = cur.fetchall()
+        results = conn.execute(query).fetchall()
 
     return len(results) == len(TABLES)
 
@@ -128,16 +125,12 @@ class LinksDB:
     def read_fighter_ids(self, fighters: Iterable["Fighter"]) -> dict["Fighter", int]:
         fighter_ids: dict["Fighter", int] = {}
         query = "SELECT id FROM fighter WHERE link = :link"
-
         for fighter in fighters:
             self.cur.execute(query, {"link": fighter.link})
-            result = self.cur.fetchone()
-            if isinstance(result, tuple):
-                fighter_ids[fighter] = result[0]
-
+            fighter_ids[fighter] = self.cur.fetchone()[0]
         return fighter_ids
 
-    def update_event(self, id: int, tried: bool, success: Optional[bool]) -> None:
+    def update_event(self, id: int, tried: bool, success: bool) -> None:
         query = "UPDATE event SET updated_at = :updated_at, tried = :tried, success = :success WHERE id = :id"
         params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
         self.cur.execute(query, params)
