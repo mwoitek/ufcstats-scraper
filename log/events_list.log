@@ -1,0 +1,8 @@
+2023-12-06 19:10:38 - events_list [ERROR] Failed to scrape row
+Traceback (most recent call last):
+  File "/home/woitek/repos/mma_project/ufcstats_scraper/ufcstats_scraper/scrapers/events_list.py", line 144, in scrape
+    event = EventsListScraper.scrape_row(row)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/woitek/repos/mma_project/ufcstats_scraper/ufcstats_scraper/scrapers/events_list.py", line 116, in scrape_row
+    raise MissingHTMLElementError("Row columns (td)")
+ufcstats_scraper.scrapers.exceptions.MissingHTMLElementError: Failed to find necessary HTML element(s): Row columns (td)

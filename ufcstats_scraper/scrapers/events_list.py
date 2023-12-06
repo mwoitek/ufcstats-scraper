@@ -22,6 +22,7 @@ from pydantic import field_serializer
 from pydantic import model_validator
 from requests.exceptions import RequestException
 
+from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -30,6 +31,8 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+
+logger = CustomLogger("events_list", "events_list")
 
 
 class Location(CustomModel):
@@ -75,8 +78,14 @@ class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
     DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "events_list"
 
+    def __init__(self) -> None:
+        self.success = False
+
     def get_soup(self) -> BeautifulSoup:
-        response = requests.get(EventsListScraper.BASE_URL, params={"page": "all"})
+        try:
+            response = requests.get(EventsListScraper.BASE_URL, params={"page": "all"})
+        except RequestException as exc:
+            raise NoSoupError(EventsListScraper.BASE_URL) from exc
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(EventsListScraper.BASE_URL)
@@ -134,7 +143,7 @@ class EventsListScraper:
             try:
                 event = EventsListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError, ValueError):
-                # TODO: Log error
+                logger.exception("Failed to scrape row")
                 continue
             if event.date < today:
                 scraped_data.append(event)
@@ -159,10 +168,13 @@ class EventsListScraper:
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
+        self.success = True
+
     def update_links_db(self, db: LinksDB) -> None:
-        if not hasattr(self, "scraped_data"):
-            raise NoScrapedDataError
-        db.insert_events(self.scraped_data)
+        if self.success:
+            db.insert_events(self.scraped_data)
+        else:
+            logger.info("DB was not updated since scraped data was not saved to JSON")
 
 
 def scrape_events_list() -> None:
@@ -171,11 +183,12 @@ def scrape_events_list() -> None:
     scraper = EventsListScraper()
     try:
         scraper.scrape()
-    except (ScraperError, RequestException):
-        # TODO: Log error
+    except ScraperError:
+        logger.exception("Failed to scrape events list")
         print("Failed!")
         print("No data was scraped.")
         return
+
     print("Done!")
     print(f"Scraped data for {len(scraper.scraped_data)} events.")
 
@@ -184,16 +197,16 @@ def scrape_events_list() -> None:
         scraper.save_json()
         print("Done!")
     except (FileNotFoundError, OSError):
-        # TODO: Log error
+        logger.exception("Failed to save data to JSON")
         print("Failed!")
 
-    print("Saving scraped links...", end=" ")
+    print("Updating links DB...", end=" ")
     try:
         with LinksDB() as db:
             scraper.update_links_db(db)
         print("Done!")
     except (DBNotSetupError, sqlite3.Error):
-        # TODO: Log error
+        logger.exception("Failed to update links DB")
         print("Failed!")
 
 
