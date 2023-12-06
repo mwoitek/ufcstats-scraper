@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-LOG_DIR = Path(__file__).resolve().parent / "log"
+LOG_DIR = Path(__file__).resolve().parents[1] / "log"
 
 
 class CustomLogger:
