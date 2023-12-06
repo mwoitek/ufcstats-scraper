@@ -1,10 +1,37 @@
+import logging
+from pathlib import Path
+
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 
-def no_op(*args, **kwargs) -> None:
-    _ = args, kwargs
+class CustomLogger:
+    def __init__(self, name: str, file_path: str | Path) -> None:
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+
+        self.handler = logging.FileHandler(file_path)
+        self.handler.setLevel(logging.DEBUG)
+
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        self.handler.setFormatter(formatter)
+
+        self.logger.addHandler(self.handler)
+
+        self.debug = self.logger.debug
+        self.info = self.logger.info
+        self.warning = self.logger.warning
+        self.error = self.logger.error
+        self.critical = self.logger.critical
+        self.exception = self.logger.exception
+
+    def __del__(self) -> None:
+        self.logger.removeHandler(self.handler)
+        self.handler.close()
 
 
 class CustomModel(BaseModel):
