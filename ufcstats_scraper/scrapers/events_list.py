@@ -6,7 +6,6 @@ from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
-from sys import exit
 from sys import stdout
 from typing import Any
 from typing import Optional
@@ -21,7 +20,6 @@ from pydantic import ValidationError
 from pydantic import computed_field
 from pydantic import field_serializer
 from pydantic import model_validator
-from pydantic import validate_call
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
@@ -31,6 +29,7 @@ from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.exceptions import ScraperError
 
 
 class Location(CustomModel):
@@ -166,56 +165,42 @@ class EventsListScraper:
         db.insert_events(self.scraped_data)
 
 
-@validate_call
-def scrape_events_list(data: bool = False, links: bool = False) -> None:
-    print("SCRAPING EVENTS LIST", end="\n\n")
-
-    if not data and not links:
-        print("Nothing to do.")
-        return
+def scrape_events_list() -> None:
+    print("SCRAPING EVENTS LIST...", end=" ")
 
     scraper = EventsListScraper()
-
     try:
         scraper.scrape()
-    except (MissingHTMLElementError, NoScrapedDataError, NoSoupError, RequestException):
+    except (ScraperError, RequestException):
         # TODO: Log error
-        print("Failed! No data was scraped.")
+        print("Failed!")
+        print("No data was scraped.")
         return
-
+    print("Done!")
     print(f"Scraped data for {len(scraper.scraped_data)} events.")
 
-    if data:
-        print("Saving to JSON...", end=" ")
-        try:
-            scraper.save_json()
-            print("Done!")
-        except (FileNotFoundError, OSError):
-            # TODO: Log error
-            print("Failed!")
+    print("Saving scraped data...", end=" ")
+    try:
+        scraper.save_json()
+        print("Done!")
+    except (FileNotFoundError, OSError):
+        # TODO: Log error
+        print("Failed!")
 
-    if links:
-        print("Saving scraped links...", end=" ")
-        try:
-            with LinksDB() as db:
-                scraper.update_links_db(db)
-            print("Done!")
-        except (DBNotSetupError, sqlite3.Error):
-            # TODO: Log error
-            print("Failed!")
+    print("Saving scraped links...", end=" ")
+    try:
+        with LinksDB() as db:
+            scraper.update_links_db(db)
+        print("Done!")
+    except (DBNotSetupError, sqlite3.Error):
+        # TODO: Log error
+        print("Failed!")
 
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for scraping the events list.")
-    parser.add_argument("-d", "--data", action="store_true", dest="data", help="get event data")
-    parser.add_argument("-l", "--links", action="store_true", dest="links", help="get event links")
     parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
-    try:
-        with redirect_stdout(stdout if args.verbose else None):
-            scrape_events_list(args.data, args.links)
-    except ValidationError as exc:
-        print("ERROR:")
-        print(exc)
-        exit(1)
+    with redirect_stdout(stdout if args.verbose else None):
+        scrape_events_list()
