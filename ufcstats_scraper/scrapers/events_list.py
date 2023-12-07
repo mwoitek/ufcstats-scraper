@@ -199,6 +199,7 @@ def scrape_events_list() -> None:
     except (FileNotFoundError, OSError):
         logger.exception("Failed to save data to JSON")
         print("Failed!")
+        return
 
     print("Updating links DB...", end=" ")
     try:
