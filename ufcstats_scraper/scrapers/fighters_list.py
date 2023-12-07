@@ -1,7 +1,7 @@
-import argparse
-import json
 import os
 import re
+from argparse import ArgumentParser
+from json import dump
 from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
@@ -145,29 +145,8 @@ class ScrapedRow(CustomModel):
 
 
 class FightersListScraper:
-    """
-    EXAMPLE USAGE:
-
-    first_letter = "v"
-    scraper = FightersListScraper(first_letter)
-
-    print(f"Scraping fighter data for letter {first_letter.upper()}...")
-    scraper.scrape()
-
-    if scraper.failed:
-        print("Something went wrong! No data scraped.")
-        exit(1)
-
-    print(f"Success! Scraped data for {len(scraper.scraped_data)} fighters.")
-
-    print("Saving to JSON...")
-    scraper.save_json()
-    print("Done!")
-    """
-
     BASE_URL = "http://www.ufcstats.com/statistics/fighters"
     DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
-    LINKS_DIR = Path(__file__).resolve().parents[1] / "data" / "links" / "fighters"
 
     def __init__(self, first_letter: str) -> None:
         self.first_letter = first_letter
@@ -283,25 +262,7 @@ class FightersListScraper:
         out_file = FightersListScraper.DATA_DIR / f"{self.first_letter}.json"
         out_data = [r.model_dump(by_alias=True, exclude_none=True) for r in self.scraped_data]
         with open(out_file, mode="w") as json_file:
-            json.dump(out_data, json_file, indent=2)
-
-        return True
-
-    def save_links(self) -> bool:
-        if not hasattr(self, "scraped_data"):
-            return False
-
-        if not (
-            FightersListScraper.LINKS_DIR.exists()
-            and FightersListScraper.LINKS_DIR.is_dir()
-            and os.access(FightersListScraper.LINKS_DIR, os.W_OK)
-        ):
-            return False
-
-        out_file = FightersListScraper.LINKS_DIR / f"{self.first_letter}.txt"
-        links = [f"{r.link}\n" for r in self.scraped_data]
-        with open(out_file, mode="w") as links_file:
-            links_file.writelines(links)
+            dump(out_data, json_file, indent=2)
 
         return True
 
@@ -334,11 +295,6 @@ def scrape_fighters_list(
         msg = "Done!" if saved else "Failed!"
         print(msg)
 
-        print("Saving scraped links...", end=" ")
-        saved = scraper.save_links()
-        msg = "Done!" if saved else "Failed!"
-        print(msg)
-
         if i < num_letters:
             print(f"Continuing in {delay} seconds...", end="\n\n")
             sleep(delay)
@@ -346,7 +302,7 @@ def scrape_fighters_list(
 
 # example usage: python fighters_list.py --letters 'abc' --delay 3
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script for scraping fighter lists.")
+    parser = ArgumentParser(description="Script for scraping fighter lists.")
 
     parser.add_argument(
         "-l",
