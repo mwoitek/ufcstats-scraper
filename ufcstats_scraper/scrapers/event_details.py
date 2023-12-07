@@ -207,8 +207,7 @@ def scrape_event(event: DBEvent) -> None:
     except ScraperError:
         logger.exception("Failed to scrape event details")
         print("Failed!")
-        return
-    finally:
+
         print("Updating event status...", end=" ")
         try:
             scraper.db_update_event(db)
@@ -216,7 +215,9 @@ def scrape_event(event: DBEvent) -> None:
         except sqlite3.Error:
             logger.exception("Failed to update event")
             print("Failed!")
-            return
+
+        return
+
     scraper.scraped_data = cast(list[Fight], scraper.scraped_data)
     print(f"Scraped data for {len(scraper.scraped_data)} fights.")
 
@@ -228,6 +229,15 @@ def scrape_event(event: DBEvent) -> None:
         logger.exception("Failed to save data to JSON")
         print("Failed!")
         return
+    finally:
+        print("Updating event status...", end=" ")
+        try:
+            scraper.db_update_event(db)
+            print("Done!")
+        except sqlite3.Error:
+            logger.exception("Failed to update event")
+            print("Failed!")
+            return
 
     print("Inserting fighter/fight data into DB...", end=" ")
     try:
