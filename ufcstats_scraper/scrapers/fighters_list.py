@@ -14,6 +14,7 @@ from typing import cast
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from pydantic import AfterValidator
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic import ValidationInfo
@@ -24,44 +25,27 @@ from pydantic import validate_call
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
+from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
+
+CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
 
 
 class Fighter(CustomModel):
     link: FighterLink = Field(..., exclude=True)
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    nickname: Optional[str] = None
-    height_str: Optional[str] = Field(
-        default=None,
-        exclude=True,
-        pattern=r"\d{1}' \d{1,2}\"",
-    )
+    first_name: Optional[CleanName] = None
+    last_name: Optional[CleanName] = None
+    nickname: Optional[CleanName] = None
+    height_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d{1}' \d{1,2}\"")
     height: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    weight_str: Optional[str] = Field(
-        default=None,
-        exclude=True,
-        pattern=r"\d+ lbs[.]",
-    )
+    weight_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+ lbs[.]")
     weight: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    reach_str: Optional[str] = Field(
-        default=None,
-        exclude=True,
-        pattern=r"\d+[.]0\"",
-    )
+    reach_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+[.]0\"")
     reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
     stance: Optional[Stance] = None
     wins: int = Field(..., ge=0)
     losses: int = Field(..., ge=0)
     draws: int = Field(..., ge=0)
     current_champion: bool = False
-
-    # TODO: Remove
-    @field_validator("first_name", "last_name", "nickname")
-    @classmethod
-    def fix_consecutive_spaces(cls, s: Optional[str]) -> Optional[str]:
-        if s is None:
-            return
-        return re.sub(r"\s{2,}", " ", s)
 
     @field_validator("height")
     @classmethod
