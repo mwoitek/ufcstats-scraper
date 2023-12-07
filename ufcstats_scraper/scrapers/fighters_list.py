@@ -7,9 +7,11 @@ from string import ascii_lowercase
 from sys import exit
 from time import sleep
 from typing import Annotated
+from typing import ClassVar
 from typing import Optional
 from typing import Self
 from typing import cast
+from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
@@ -21,10 +23,15 @@ from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic import validate_call
+from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
+from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
+from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
@@ -57,8 +64,7 @@ class Fighter(CustomModel):
         if not isinstance(height_str, str):
             return
 
-        pattern = r"(\d{1})' (\d{1,2})\""
-        match = re.match(pattern, height_str)
+        match = re.match(r"(\d{1})' (\d{1,2})\"", height_str)
         match = cast(re.Match, match)
 
         feet = int(match.group(1))
@@ -77,8 +83,7 @@ class Fighter(CustomModel):
         if not isinstance(weight_str, str):
             return
 
-        pattern = r"(\d+) lbs[.]"
-        match = re.match(pattern, weight_str)
+        match = re.match(r"(\d+) lbs[.]", weight_str)
         match = cast(re.Match, match)
 
         weight = int(match.group(1))
@@ -94,8 +99,7 @@ class Fighter(CustomModel):
         if not isinstance(reach_str, str):
             return
 
-        pattern = r"(\d+)[.]0\""
-        match = re.match(pattern, reach_str)
+        match = re.match(r"(\d+)[.]0\"", reach_str)
         match = cast(re.Match, match)
 
         reach = int(match.group(1))
@@ -118,42 +122,44 @@ class Fighter(CustomModel):
         return self
 
 
-class FightersListScraper:
-    BASE_URL = "http://www.ufcstats.com/statistics/fighters"
-    DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "fighters_list"
+class FightersListScraper(CustomModel):
+    BASE_URL: ClassVar[str] = "http://www.ufcstats.com/statistics/fighters"
+    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighters_list"
 
-    def __init__(self, first_letter: str) -> None:
-        self.first_letter = first_letter
-        self.failed = False
+    letter: str = Field(..., pattern=r"[a-z]{1}")
 
-    def get_soup(self) -> BeautifulSoup | None:
-        params = {
-            "char": self.first_letter,
-            "page": "all",
-        }
-        response = requests.get(FightersListScraper.BASE_URL, params=params)
+    tried: bool = False
+    success: Optional[bool] = None
+
+    soup: Optional[BeautifulSoup] = None
+    rows: Optional[list[Tag]] = None
+    scraped_data: Optional[list[Fighter]] = None
+
+    def get_soup(self) -> BeautifulSoup:
+        params = {"char": self.letter, "page": "all"}
+        try:
+            response = requests.get(FightersListScraper.BASE_URL, params=params)
+        except RequestException as exc:
+            raise NoSoupError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}") from exc
 
         if response.status_code != requests.codes["ok"]:
-            self.failed = True
-            return
+            raise NoSoupError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}")
 
         html = response.text
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> list[Tag] | None:
-        if not hasattr(self, "soup"):
-            return
+    def get_table_rows(self) -> list[Tag]:
+        if self.soup is None:
+            raise NoSoupError
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table body (tbody)")
 
         rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
         if len(rows) == 0:
-            self.failed = True
-            return
+            raise MissingHTMLElementError("Table rows (tr)")
 
         self.rows = rows
         return self.rows
@@ -233,7 +239,7 @@ class FightersListScraper:
         ):
             return False
 
-        out_file = FightersListScraper.DATA_DIR / f"{self.first_letter}.json"
+        out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
         out_data = [r.model_dump(by_alias=True, exclude_none=True) for r in self.scraped_data]
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
