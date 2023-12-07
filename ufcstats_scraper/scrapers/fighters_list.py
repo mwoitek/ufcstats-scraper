@@ -7,15 +7,14 @@ from string import ascii_lowercase
 from sys import exit
 from time import sleep
 from typing import Annotated
-from typing import ClassVar
 from typing import Optional
+from typing import Self
 from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 from pydantic import Field
-from pydantic import HttpUrl
 from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
@@ -23,12 +22,12 @@ from pydantic import model_validator
 from pydantic import validate_call
 
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.scrapers.common import FighterLink
+from ufcstats_scraper.scrapers.common import Stance
 
 
-class ScrapedRow(CustomModel):
-    VALID_STANCES: ClassVar[set[str]] = {"Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"}
-
-    link: HttpUrl = Field(..., exclude=True)
+class Fighter(CustomModel):
+    link: FighterLink = Field(..., exclude=True)
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     nickname: Optional[str] = None
@@ -50,12 +49,13 @@ class ScrapedRow(CustomModel):
         pattern=r"\d+[.]0\"",
     )
     reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    stance: Optional[str] = None
+    stance: Optional[Stance] = None
     wins: int = Field(..., ge=0)
     losses: int = Field(..., ge=0)
     draws: int = Field(..., ge=0)
     current_champion: bool = False
 
+    # TODO: Remove
     @field_validator("first_name", "last_name", "nickname")
     @classmethod
     def fix_consecutive_spaces(cls, s: Optional[str]) -> Optional[str]:
@@ -117,18 +117,8 @@ class ScrapedRow(CustomModel):
         reach = int(match.group(1))
         return reach
 
-    @field_validator("stance")
-    @classmethod
-    def check_stance(cls, stance: Optional[str]) -> Optional[str]:
-        if stance is None:
-            return
-        stance = stance.title()
-        if stance not in cls.VALID_STANCES:
-            raise ValueError(f"invalid stance: {stance}")
-        return stance
-
-    @model_validator(mode="after")  # pyright: ignore
-    def check_full_name(self) -> "ScrapedRow":
+    @model_validator(mode="after")
+    def check_full_name(self) -> Self:
         first_name = self.first_name
         if first_name is None:
             first_name = ""
@@ -185,7 +175,7 @@ class FightersListScraper:
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> ScrapedRow | None:
+    def scrape_row(row: Tag) -> Fighter | None:
         cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
         if len(cells) != 11:
             return
@@ -227,11 +217,11 @@ class FightersListScraper:
         data_dict["current_champion"] = isinstance(cells[-1].find("img"), Tag)
 
         try:
-            return ScrapedRow.model_validate(data_dict)
+            return Fighter.model_validate(data_dict)
         except ValidationError:
             return
 
-    def scrape(self) -> list[ScrapedRow] | None:
+    def scrape(self) -> list[Fighter] | None:
         self.get_soup()
         self.get_table_rows()
 
