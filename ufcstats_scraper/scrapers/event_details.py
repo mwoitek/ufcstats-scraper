@@ -8,6 +8,7 @@ from typing import Annotated
 from typing import Any
 from typing import ClassVar
 from typing import Optional
+from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,17 +16,23 @@ from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic.functional_validators import AfterValidator
+from requests.exceptions import RequestException
 
+from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.models import DBEvent
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
+
+logger = CustomLogger("event_details", "event_details")
 
 
 class Fighter(CustomModel):
@@ -62,7 +69,10 @@ class EventDetailsScraper(CustomModel):
     success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
-        response = requests.get(str(self.link))
+        try:
+            response = requests.get(str(self.link))
+        except RequestException as exc:
+            raise NoSoupError(self.link) from exc
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(self.link)
@@ -122,14 +132,13 @@ class EventDetailsScraper(CustomModel):
             try:
                 fight = self.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
-                # TODO: Log error
+                logger.exception("Failed to scrape row")
                 continue
             scraped_data.append(fight)
 
         if len(scraped_data) == 0:
             raise NoScrapedDataError(self.link)
 
-        self.success = True
         self.scraped_data = scraped_data
         return self.scraped_data
 
@@ -148,13 +157,73 @@ class EventDetailsScraper(CustomModel):
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
-    def update_links_db(self, db: LinksDB) -> None:
+        self.success = True
+
+    def db_update_event(self, db: LinksDB) -> None:
         if not self.tried:
+            logger.info("Event was not updated since no attempt was made to scrape data")
             return
+        self.success = cast(bool, self.success)
         db.update_event(self.id, self.tried, self.success)
-        if not self.success:
+
+    def db_insert_fights(self, db: LinksDB) -> None:
+        if self.success:
+            db.insert_fights(self.scraped_data)
+        else:
+            logger.info("DB was not updated since scraped data was not saved to JSON")
+
+
+def scrape_event(event: DBEvent) -> None:
+    print(f'Scraping page for "{event.name}"...', end=" ")
+
+    try:
+        db = LinksDB()
+    except (DBNotSetupError, sqlite3.Error):
+        logger.exception("Failed to create DB object")
+        print("Failed!")
+        return
+
+    try:
+        scraper = EventDetailsScraper.model_validate(event._asdict())
+    except ValidationError:
+        logger.exception("Failed to create scraper object")
+        print("Failed!")
+        return
+
+    try:
+        scraper.scrape()
+        print("Done!")
+    except ScraperError:
+        logger.exception("Failed to scrape event details")
+        print("Failed!")
+        return
+    finally:
+        print("Updating event status...", end=" ")
+        try:
+            scraper.db_update_event(db)
+            print("Done!")
+        except sqlite3.Error:
+            logger.exception("Failed to update event")
+            print("Failed!")
             return
-        db.insert_fights(self.scraped_data)
+    print(f"Scraped data for {len(scraper.scraped_data)} fights.")
+
+    print("Saving scraped data...", end=" ")
+    try:
+        scraper.save_json()
+        print("Done!")
+    except (FileNotFoundError, OSError):
+        logger.exception("Failed to save data to JSON")
+        print("Failed!")
+        return
+
+    print("Inserting fighter/fight data into DB...", end=" ")
+    try:
+        scraper.db_insert_fights(db)
+        print("Done!")
+    except sqlite3.Error:
+        logger.exception("Failed to update links DB")
+        print("Failed!")
 
 
 if __name__ == "__main__":
