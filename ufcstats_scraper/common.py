@@ -39,6 +39,7 @@ class CustomLogger:
 class CustomModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel,
+        arbitrary_types_allowed=True,
         extra="forbid",
         populate_by_name=True,
         str_min_length=1,

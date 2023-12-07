@@ -1,9 +1,12 @@
 import sqlite3
 from argparse import ArgumentParser
+from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
 from sys import exit
+from sys import stdout
+from time import sleep
 from typing import Annotated
 from typing import Any
 from typing import ClassVar
@@ -15,11 +18,13 @@ from bs4 import BeautifulSoup
 from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
+from pydantic import validate_call
 from pydantic.functional_validators import AfterValidator
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
@@ -68,6 +73,10 @@ class EventDetailsScraper(CustomModel):
     tried: bool = False
     success: Optional[bool] = None
 
+    soup: Optional[BeautifulSoup] = None
+    rows: Optional[list[Tag]] = None
+    scraped_data: Optional[list[Fight]] = None
+
     def get_soup(self) -> BeautifulSoup:
         try:
             response = requests.get(str(self.link))
@@ -82,7 +91,7 @@ class EventDetailsScraper(CustomModel):
         return self.soup
 
     def get_table_rows(self) -> list[Tag]:
-        if not hasattr(self, "soup"):
+        if self.soup is None:
             raise NoSoupError
 
         table_body = self.soup.find("tbody")
@@ -126,6 +135,7 @@ class EventDetailsScraper(CustomModel):
 
         self.get_soup()
         self.get_table_rows()
+        self.rows = cast(list[Tag], self.rows)
 
         scraped_data: list[Fight] = []
         for row in self.rows:
@@ -143,7 +153,7 @@ class EventDetailsScraper(CustomModel):
         return self.scraped_data
 
     def save_json(self) -> None:
-        if not hasattr(self, "scraped_data"):
+        if self.scraped_data is None:
             raise NoScrapedDataError
 
         try:
@@ -168,6 +178,7 @@ class EventDetailsScraper(CustomModel):
 
     def db_insert_fights(self, db: LinksDB) -> None:
         if self.success:
+            self.scraped_data = cast(list[Fight], self.scraped_data)
             db.insert_fights(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
@@ -206,6 +217,7 @@ def scrape_event(event: DBEvent) -> None:
             logger.exception("Failed to update event")
             print("Failed!")
             return
+    scraper.scraped_data = cast(list[Fight], scraper.scraped_data)
     print(f"Scraped data for {len(scraper.scraped_data)} fights.")
 
     print("Saving scraped data...", end=" ")
@@ -226,8 +238,45 @@ def scrape_event(event: DBEvent) -> None:
         print("Failed!")
 
 
+@validate_call
+def scrape_event_details(select: LinkSelection, delay: int | float = 1) -> None:
+    print("SCRAPING EVENT DETAILS", end="\n\n")
+
+    print("Retrieving event links...", end=" ")
+    events: list[DBEvent] = []
+    try:
+        with LinksDB() as db:
+            events.extend(db.read_events(select))
+        print("Done!")
+    except (DBNotSetupError, sqlite3.Error):
+        logger.exception("Failed to read events from DB")
+        print("Failed!")
+        return
+
+    num_events = len(events)
+    if num_events == 0:
+        print("No event to scrape.")
+        return
+
+    print()
+
+    for i, event in enumerate(events, start=1):
+        scrape_event(event)
+        if i < num_events:
+            print(f"Continuing in {delay} second(s)...", end="\n\n")
+            sleep(delay)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for scraping event details.")
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=float,
+        default=1.0,
+        dest="delay",
+        help="set delay between requests",
+    )
     parser.add_argument(
         "-f",
         "--filter",
@@ -237,13 +286,14 @@ if __name__ == "__main__":
         dest="select",
         help="filter events in the database",
     )
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
     try:
-        with LinksDB() as db:
-            events = db.read_events(args.select)
-            print(events[:15])
-    except (DBNotSetupError, sqlite3.Error) as exc:
+        with redirect_stdout(stdout if args.verbose else None):
+            scrape_event_details(args.select, args.delay)
+    except ValidationError as exc:
+        logger.exception("Failed to run main function")
         print("ERROR:")
         print(exc)
         exit(1)
