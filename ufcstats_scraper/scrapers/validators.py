@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import HttpUrl
 
 LinkType = Literal["event", "fight", "fighter"]
+VALID_STANCES = {"Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"}
 
 
 def check_link(type_: LinkType) -> Callable[[HttpUrl], HttpUrl]:
@@ -25,3 +26,10 @@ check_fighter_link = check_link("fighter")
 
 def fix_consecutive_spaces(s: str) -> str:
     return re.sub(r"\s{2,}", " ", s)
+
+
+def check_stance(stance: str) -> str:
+    stance = stance.title()
+    if stance not in VALID_STANCES:
+        raise ValueError(f"invalid stance: {stance}")
+    return stance
