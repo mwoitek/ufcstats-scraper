@@ -1,12 +1,13 @@
-import os
 import re
 from argparse import ArgumentParser
 from json import dump
+from os import mkdir
 from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
 from time import sleep
 from typing import Annotated
+from typing import Any
 from typing import ClassVar
 from typing import Optional
 from typing import Self
@@ -25,16 +26,17 @@ from pydantic import model_validator
 from pydantic import validate_call
 from requests.exceptions import RequestException
 
+from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
-from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
+logger = CustomLogger("fighters_list", "fighters_list")
 
 
 class Fighter(CustomModel):
@@ -127,13 +129,10 @@ class FightersListScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighters_list"
 
     letter: str = Field(..., pattern=r"[a-z]{1}")
-
-    tried: bool = False
-    success: Optional[bool] = None
-
     soup: Optional[BeautifulSoup] = None
     rows: Optional[list[Tag]] = None
     scraped_data: Optional[list[Fighter]] = None
+    success: bool = False
 
     def get_soup(self) -> BeautifulSoup:
         params = {"char": self.letter, "page": "all"}
@@ -165,24 +164,20 @@ class FightersListScraper(CustomModel):
         return self.rows
 
     @staticmethod
-    def scrape_row(row: Tag) -> Fighter | None:
-        cells = [c for c in row.find_all("td") if isinstance(c, Tag)]
-        if len(cells) != 11:
-            return
+    def scrape_row(row: Tag) -> Fighter:
+        cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
+        if len(cols) != 11:
+            raise MissingHTMLElementError("Row columns (td)")
 
-        data_dict: dict = {}
+        data_dict: dict[str, Any] = {}
 
-        # scrape link
-        anchor = cells[0].find("a")
-        if isinstance(anchor, Tag):
-            link = anchor.get("href")
-            if isinstance(link, str):
-                data_dict["link"] = link
+        # Scrape link
+        anchor = cols[0].find("a")
+        if not isinstance(anchor, Tag):
+            raise MissingHTMLElementError("Anchor tag (a)")
+        data_dict["link"] = anchor.get("href")
 
-        if "link" not in data_dict:
-            return
-
-        # scrape all other fields except for current_champion
+        # Scrape all other fields except for current_champion
         FIELDS = [
             "first_name",
             "last_name",
@@ -195,56 +190,50 @@ class FightersListScraper(CustomModel):
             "losses",
             "draws",
         ]
-        cells_text = map(lambda c: c.get_text().strip().strip("-"), cells[:-1])
-        for field, text in zip(FIELDS, cells_text):
-            if text != "":
-                data_dict[field] = text
+        cols_text = map(lambda c: c.get_text().strip().strip("-"), cols[:-1])
+        data_dict.update(zip(FIELDS, cols_text))
 
-        if any(field not in data_dict for field in ["wins", "losses", "draws"]):
-            return
+        # Scrape current_champion
+        data_dict["current_champion"] = isinstance(cols[-1].find("img"), Tag)
 
-        # scrape current_champion
-        data_dict["current_champion"] = isinstance(cells[-1].find("img"), Tag)
+        return Fighter.model_validate(data_dict)
 
-        try:
-            return Fighter.model_validate(data_dict)
-        except ValidationError:
-            return
-
-    def scrape(self) -> list[Fighter] | None:
+    def scrape(self) -> list[Fighter]:
         self.get_soup()
         self.get_table_rows()
+        self.rows = cast(list[Tag], self.rows)
 
-        if not hasattr(self, "rows"):
-            return
-
-        data_iter = map(lambda r: FightersListScraper.scrape_row(r), self.rows)
-        scraped_data = [d for d in data_iter if d is not None]
+        scraped_data: list[Fighter] = []
+        for row in self.rows:
+            try:
+                fighter = FightersListScraper.scrape_row(row)
+            except (MissingHTMLElementError, ValidationError):
+                logger.exception("Failed to scrape row")
+                continue
+            scraped_data.append(fighter)
 
         if len(scraped_data) == 0:
-            self.failed = True
-            return
+            params = {"char": self.letter, "page": "all"}
+            raise NoScrapedDataError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}")
 
         self.scraped_data = scraped_data
         return self.scraped_data
 
-    def save_json(self) -> bool:
-        if not hasattr(self, "scraped_data"):
-            return False
+    def save_json(self) -> None:
+        if self.scraped_data is None:
+            raise NoScrapedDataError
 
-        if not (
-            FightersListScraper.DATA_DIR.exists()
-            and FightersListScraper.DATA_DIR.is_dir()
-            and os.access(FightersListScraper.DATA_DIR, os.W_OK)
-        ):
-            return False
+        try:
+            mkdir(FightersListScraper.DATA_DIR, mode=0o755)
+        except FileExistsError:
+            pass
 
+        out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in self.scraped_data]
         out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
-        out_data = [r.model_dump(by_alias=True, exclude_none=True) for r in self.scraped_data]
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
-        return True
+        self.success = True
 
 
 @validate_call
@@ -256,7 +245,7 @@ def scrape_fighters_list(
     num_letters = len(letters)
 
     for i, letter in enumerate(letters, start=1):
-        scraper = FightersListScraper(letter)
+        scraper = FightersListScraper(letter=letter)
 
         print(f"Scraping fighter data for letter {letter.upper()}...")
         scraper.scrape()
