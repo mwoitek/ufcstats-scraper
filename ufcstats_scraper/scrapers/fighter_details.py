@@ -6,21 +6,44 @@ from datetime import datetime
 from pathlib import Path
 from sys import exit
 from time import sleep
+from typing import Optional
+from typing import Self
+from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
+from pydantic import Field
+from pydantic import model_validator
+
+from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.scrapers.common import CleanName
 
 
-# Not a general solution. Works in this case, though.
-def to_camel_case(s: str) -> str:
-    parts = s.lower().replace(".", "").split(" ")
-    return parts[0] if len(parts) == 1 else parts[0] + "".join(p.capitalize() for p in parts[1:])
+class Header(CustomModel):
+    full_name: CleanName
+    nickname: Optional[CleanName] = None
+    record_str: str = Field(..., exclude=True, pattern=r"Record: \d+-\d+-\d+( [(]\d+ NC[)])?")
+    wins: Optional[int] = Field(default=None, ge=0)
+    losses: Optional[int] = Field(default=None, ge=0)
+    draws: Optional[int] = Field(default=None, ge=0)
+    no_contests: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def fill_record(self) -> Self:
+        pattern = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
+        match = re.match(pattern, self.record_str, flags=re.IGNORECASE)
+        match = cast(re.Match, match)
+
+        record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
+        record_dict["no_contests"] = record_dict.pop("noContests")
+
+        for k, v in record_dict.items():
+            setattr(self, k, v)
+        return self
 
 
 class FighterDetailsScraper:
-    RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
-
     INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
     FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
 
@@ -64,11 +87,7 @@ class FighterDetailsScraper:
 
         if isinstance(record_span, Tag):
             record_str = record_span.get_text().strip()
-            match = re.match(FighterDetailsScraper.RECORD_PATTERN, record_str, flags=re.IGNORECASE)
-
-            if isinstance(match, re.Match):
-                record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
-                data_dict.update(record_dict)
+            # FIXME
 
         self.header_data = data_dict if len(data_dict) > 0 else None
         return self.header_data
