@@ -128,6 +128,37 @@ class PersonalInfo(CustomModel):
         return date_of_birth
 
 
+class CareerStats(CustomModel):
+    slpm: float = Field(..., ge=0.0)
+    str_acc_str: str = Field(..., exclude=True, pattern=r"\d+%")
+    str_acc: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
+    sapm: float = Field(..., ge=0.0)
+    str_def_str: str = Field(..., exclude=True, pattern=r"\d+%")
+    str_def: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
+    td_avg: float = Field(..., ge=0.0)
+    td_acc_str: str = Field(..., exclude=True, pattern=r"\d+%")
+    td_acc: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
+    td_def_str: str = Field(..., exclude=True, pattern=r"\d+%")
+    td_def: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
+    sub_avg: float = Field(..., ge=0.0)
+
+    @field_validator("str_acc", "str_def", "td_acc", "td_def")
+    @classmethod
+    def fill_ratio(cls, value: Optional[float], info: ValidationInfo) -> Optional[float]:
+        if isinstance(value, float):
+            return value
+
+        field_str = info.data.get(f"{info.field_name}_str")
+        field_str = cast(str, field_str)
+
+        match = re.match(r"(\d+)%", field_str)
+        match = cast(re.Match, match)
+
+        percent = int(match.group(1))
+        ratio = percent / 100
+        return ratio
+
+
 class FighterDetailsScraper:
     INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
     FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
