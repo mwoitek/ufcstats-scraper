@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+from datetime import date
 from datetime import datetime
 from pathlib import Path
 from sys import exit
@@ -14,10 +15,13 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 from pydantic import Field
+from pydantic import ValidationInfo
+from pydantic import field_validator
 from pydantic import model_validator
 
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import CleanName
+from ufcstats_scraper.scrapers.common import Stance
 
 
 class Header(CustomModel):
@@ -43,12 +47,93 @@ class Header(CustomModel):
         return self
 
 
+class PersonalInfo(CustomModel):
+    height_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d{1}' \d{1,2}\"")
+    height: Optional[int] = Field(default=None, validate_default=True, gt=0)
+    weight_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+ lbs[.]")
+    weight: Optional[int] = Field(default=None, validate_default=True, gt=0)
+    reach_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+\"")
+    reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
+    stance: Optional[Stance] = None
+    date_of_birth_str: Optional[str] = Field(default=None, exclude=True, pattern=r"[A-Za-z]{3} \d{2}, \d{4}")
+    date_of_birth: Optional[date] = Field(default=None, validate_default=True)
+
+    # NOTE: The next 3 validators are the same (or almost the same) as the
+    # ones defined for the list scraper. I don't know how to reduce this
+    # code duplication in the latest version of Pydantic. For now, this is
+    # the best I can do, unfortunately.
+
+    @field_validator("height")
+    @classmethod
+    def fill_height(cls, height: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(height, int):
+            return height
+
+        height_str = info.data.get("height_str")
+        if not isinstance(height_str, str):
+            return
+
+        match = re.match(r"(\d{1})' (\d{1,2})\"", height_str)
+        match = cast(re.Match, match)
+
+        feet = int(match.group(1))
+        inches = int(match.group(2))
+
+        height = feet * 12 + inches
+        return height
+
+    @field_validator("weight")
+    @classmethod
+    def fill_weight(cls, weight: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(weight, int):
+            return weight
+
+        weight_str = info.data.get("weight_str")
+        if not isinstance(weight_str, str):
+            return
+
+        match = re.match(r"(\d+) lbs[.]", weight_str)
+        match = cast(re.Match, match)
+
+        weight = int(match.group(1))
+        return weight
+
+    @field_validator("reach")
+    @classmethod
+    def fill_reach(cls, reach: Optional[int], info: ValidationInfo) -> Optional[int]:
+        if isinstance(reach, int):
+            return reach
+
+        reach_str = info.data.get("reach_str")
+        if not isinstance(reach_str, str):
+            return
+
+        match = re.match(r"(\d+)\"", reach_str)
+        match = cast(re.Match, match)
+
+        reach = int(match.group(1))
+        return reach
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def fill_date_of_birth(cls, date_of_birth: Optional[date], info: ValidationInfo) -> Optional[date]:
+        if isinstance(date_of_birth, date):
+            return date_of_birth
+
+        date_of_birth_str = info.data.get("date_of_birth_str")
+        if not isinstance(date_of_birth_str, str):
+            return
+
+        date_of_birth = datetime.strptime(date_of_birth_str, "%b %d, %Y").date()
+        return date_of_birth
+
+
 class FighterDetailsScraper:
     INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
     FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
-
     SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
 
+    # TODO: Remove
     def __init__(self, link: str) -> None:
         self.link = link
         self.failed = False
