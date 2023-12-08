@@ -11,10 +11,6 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 
-from exit_code import ExitCode
-
-DataDict = dict[str, str | int | float]
-
 
 # Not a general solution. Works in this case, though.
 def to_camel_case(s: str) -> str:
@@ -23,23 +19,6 @@ def to_camel_case(s: str) -> str:
 
 
 class FighterDetailsScraper:
-    """
-    EXAMPLE USAGE:
-
-    link = "http://ufcstats.com/fighter-details/a1f6999fe57236e0"  # Wanderlei Silva
-    scraper = FighterDetailsScraper(link)
-
-    print(f"Scraping fighter details from {link}...")
-    scraper.scrape()
-
-    if scraper.failed:
-        print("Something went wrong! No data was scraped.")
-        exit(1)
-
-    print("Success! Here's the fighter data:")
-    print(scraper.get_json())
-    """
-
     RECORD_PATTERN = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
 
     INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
@@ -194,22 +173,6 @@ class FighterDetailsScraper:
         if not hasattr(self, "scraped_data"):
             return
         return json.dumps(self.scraped_data, indent=2)
-
-
-def read_links(first_letter: str) -> list[str] | None:
-    links_dir = Path(__file__).resolve().parents[1] / "data" / "links" / "fighters"
-    if not (links_dir.exists() and links_dir.is_dir() and os.access(links_dir, os.R_OK)):
-        return
-
-    in_file = links_dir / f"{first_letter}.txt"
-    if not (in_file.exists() and in_file.is_file() and os.access(in_file, os.R_OK)):
-        return
-
-    links: list[str] = []
-    with open(in_file, mode="r") as links_file:
-        links = [line.strip() for line in links_file]
-    links = [link for link in links if link != ""]
-    return links if len(links) > 0 else None
 
 
 def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
