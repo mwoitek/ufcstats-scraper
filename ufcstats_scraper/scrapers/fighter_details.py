@@ -19,10 +19,14 @@ from pydantic import Field
 from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
+from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import CleanName
+from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
+from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
 class Header(CustomModel):
@@ -208,54 +212,55 @@ class Fighter(CustomModel):
         return flat_dict
 
 
-class FighterDetailsScraper:
-    INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
-    FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
-    SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
-
+class FighterDetailsScraper(CustomModel):
     # TODO: Remove
-    def __init__(self, link: str) -> None:
-        self.link = link
-        self.failed = False
+    # INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
+    # FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
+    # SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
 
-    def get_soup(self) -> BeautifulSoup | None:
-        response = requests.get(self.link)
+    link: FighterLink
+    name: str
+
+    soup: Optional[BeautifulSoup] = None
+
+    def get_soup(self) -> BeautifulSoup:
+        try:
+            response = requests.get(str(self.link))
+        except RequestException as exc:
+            raise NoSoupError(self.link) from exc
 
         if response.status_code != requests.codes["ok"]:
-            self.failed = True
-            return
+            raise NoSoupError(self.link)
 
         html = response.text
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def scrape_header(self) -> dict[str, str | int] | None:
-        if not hasattr(self, "soup"):
-            return
+    def scrape_header(self) -> Header:
+        if self.soup is None:
+            raise NoSoupError
 
-        data_dict: dict[str, str | int] = {}
-
-        # scrape full name
+        # Scrape full name
         name_span = self.soup.find("span", class_="b-content__title-highlight")
-        if isinstance(name_span, Tag):
-            data_dict["fullName"] = name_span.get_text().strip()
+        if not isinstance(name_span, Tag):
+            raise MissingHTMLElementError("Name span (span.b-content__title-highlight)")
+        data_dict: dict[str, Any] = {"full_name": name_span.get_text()}
 
-        # scrape nickname
+        # Scrape nickname
         nickname_p = self.soup.find("p", class_="b-content__Nickname")
-        if isinstance(nickname_p, Tag):
-            data_dict["nickname"] = nickname_p.get_text().strip()
-            if data_dict["nickname"] == "":
-                del data_dict["nickname"]
+        if not isinstance(nickname_p, Tag):
+            raise MissingHTMLElementError("Nickname paragraph (p.b-content__Nickname)")
+        data_dict["nickname"] = nickname_p.get_text().strip()
+        if data_dict["nickname"] == "":
+            del data_dict["nickname"]
 
-        # scrape record
+        # Scrape record
         record_span = self.soup.find("span", class_="b-content__title-record")
+        if not isinstance(record_span, Tag):
+            raise MissingHTMLElementError("Record span (span.b-content__title-record)")
+        data_dict["record_str"] = record_span.get_text()
 
-        if isinstance(record_span, Tag):
-            record_str = record_span.get_text().strip()
-            # FIXME
-
-        self.header_data = data_dict if len(data_dict) > 0 else None
-        return self.header_data
+        return Header.model_validate(data_dict)
 
     def scrape_personal_info(self) -> dict[str, str] | None:
         if not hasattr(self, "soup"):
