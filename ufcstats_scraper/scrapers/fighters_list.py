@@ -1,10 +1,14 @@
+# TODO: Update links DB
+
 import re
 from argparse import ArgumentParser
+from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
+from sys import stdout
 from time import sleep
 from typing import Annotated
 from typing import Any
@@ -33,6 +37,7 @@ from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
@@ -191,7 +196,8 @@ class FightersListScraper(CustomModel):
             "draws",
         ]
         cols_text = map(lambda c: c.get_text().strip().strip("-"), cols[:-1])
-        data_dict.update(zip(FIELDS, cols_text))
+        pairs = filter(lambda p: p[1] != "", zip(FIELDS, cols_text))
+        data_dict.update(pairs)
 
         # Scrape current_champion
         data_dict["current_champion"] = isinstance(cols[-1].find("img"), Tag)
@@ -239,7 +245,7 @@ class FightersListScraper(CustomModel):
 @validate_call
 def scrape_fighters_list(
     letters: Annotated[str, Field(max_length=26, pattern=r"^[a-z]+$")] = ascii_lowercase,
-    delay: Annotated[int, Field(gt=0)] = 5,
+    delay: Annotated[float, Field(gt=0.0)] = 3.0,
 ) -> None:
     print("SCRAPING FIGHTERS LIST", end="\n\n")
     num_letters = len(letters)
@@ -247,57 +253,63 @@ def scrape_fighters_list(
     for i, letter in enumerate(letters, start=1):
         scraper = FightersListScraper(letter=letter)
 
-        print(f"Scraping fighter data for letter {letter.upper()}...")
-        scraper.scrape()
+        print(f"Scraping fighter data for letter {letter.upper()}...", end=" ")
 
-        if scraper.failed:
-            print("Something went wrong! No data scraped.")
+        try:
+            scraper.scrape()
+            print("Done!")
+        except ScraperError:
+            logger.exception(f"Failed to scrape data for {letter.upper()}")
+            print("Failed!")
             if i < num_letters:
-                print(f"Continuing in {delay} seconds...", end="\n\n")
+                print(f"Continuing in {delay} second(s)...", end="\n\n")
                 sleep(delay)
             continue
 
-        print(f"Success! Scraped data for {len(scraper.scraped_data)} fighters.")
+        scraper.scraped_data = cast(list[Fighter], scraper.scraped_data)
+        print(f"Scraped data for {len(scraper.scraped_data)} fighters.")
 
-        print("Saving to JSON...", end=" ")
-        saved = scraper.save_json()
-        msg = "Done!" if saved else "Failed!"
-        print(msg)
+        print("Saving scraped data...", end=" ")
+        try:
+            scraper.save_json()
+            print("Done!")
+        except (FileNotFoundError, OSError):
+            logger.exception("Failed to save data to JSON")
+            print("Failed!")
 
         if i < num_letters:
-            print(f"Continuing in {delay} seconds...", end="\n\n")
+            print(f"Continuing in {delay} second(s)...", end="\n\n")
             sleep(delay)
 
 
-# example usage: python fighters_list.py --letters 'abc' --delay 3
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for scraping fighter lists.")
-
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=float,
+        default=3.0,
+        dest="delay",
+        help="set delay between requests",
+    )
     parser.add_argument(
         "-l",
         "--letters",
         type=str,
-        dest="letters",
         default=ascii_lowercase,
+        dest="letters",
         help="set letters to scrape",
     )
-    parser.add_argument(
-        "-d",
-        "--delay",
-        type=int,
-        dest="delay",
-        default=5,
-        help="set delay between requests",
-    )
-
+    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
     letters = cast(str, args.letters)
     letters = letters.strip().lower()
 
     try:
-        scrape_fighters_list(letters, args.delay)
+        with redirect_stdout(stdout if args.verbose else None):
+            scrape_fighters_list(letters, args.delay)
     except ValidationError as exc:
-        print("INVALID ARGUMENTS:", end="\n\n")
+        print("ERROR:")
         print(exc)
         exit(1)
