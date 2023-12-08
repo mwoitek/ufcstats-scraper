@@ -21,7 +21,6 @@ from urllib.parse import urlencode
 import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from pydantic import AfterValidator
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic import ValidationInfo
@@ -32,15 +31,14 @@ from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
-from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
-CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
 logger = CustomLogger("fighters_list", "fighters_list")
 
 
