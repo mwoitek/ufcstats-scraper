@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from sys import exit
 from time import sleep
+from typing import Any
 from typing import Optional
 from typing import Self
 from typing import cast
@@ -157,6 +158,54 @@ class CareerStats(CustomModel):
         percent = int(match.group(1))
         ratio = percent / 100
         return ratio
+
+
+class Fighter(CustomModel):
+    header: Header
+    personal_info: Optional[PersonalInfo]
+    career_stats: Optional[CareerStats]
+
+    @field_validator("personal_info")
+    @classmethod
+    def check_personal_info(cls, personal_info: Optional[PersonalInfo]) -> Optional[PersonalInfo]:
+        if personal_info is None:
+            return
+
+        if len(personal_info.model_dump(exclude_none=True)) == 0:
+            return
+
+        return personal_info
+
+    @field_validator("career_stats")
+    @classmethod
+    def check_career_stats(cls, career_stats: Optional[CareerStats]) -> Optional[CareerStats]:
+        if career_stats is None:
+            return
+
+        # For some fighters, every career stat is equal to zero. This is
+        # garbage data, and will be disregarded.
+        if all(stat == 0.0 for stat in career_stats.model_dump().values()):
+            return
+
+        return career_stats
+
+    def to_dict(self, redundant=True) -> dict[str, Any]:
+        flat_dict: dict[str, Any] = {}
+
+        orig_dict = self.model_dump(by_alias=True, exclude_none=True)
+        for nested_dict in orig_dict.values():
+            nested_dict = cast(dict[str, Any], nested_dict)
+            flat_dict.update(nested_dict)
+
+        if redundant:
+            return flat_dict
+
+        REDUNDANT_KEYS = ["nickname", "wins", "losses", "draws", "height", "weight", "reach", "stance"]
+        keys_to_remove = filter(lambda k: k in flat_dict, REDUNDANT_KEYS)
+        for key in keys_to_remove:
+            del flat_dict[key]
+
+        return flat_dict
 
 
 class FighterDetailsScraper:
