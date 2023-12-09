@@ -28,6 +28,7 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
+from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
@@ -249,7 +250,10 @@ def scrape_event(event: DBEvent) -> None:
 
 
 @validate_call
-def scrape_event_details(select: LinkSelection, delay: float = 1.0) -> None:
+def scrape_event_details(
+    select: LinkSelection,
+    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+) -> None:
     print("SCRAPING EVENT DETAILS", end="\n\n")
 
     print("Retrieving event links...", end=" ")
@@ -283,7 +287,7 @@ if __name__ == "__main__":
         "-d",
         "--delay",
         type=float,
-        default=1.0,
+        default=DEFAULT_DELAY,
         dest="delay",
         help="set delay between requests",
     )

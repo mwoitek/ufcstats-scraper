@@ -31,6 +31,7 @@ from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
@@ -243,7 +244,7 @@ class FightersListScraper(CustomModel):
 @validate_call
 def scrape_fighters_list(
     letters: Annotated[str, Field(max_length=26, pattern=r"^[a-z]+$")] = ascii_lowercase,
-    delay: Annotated[float, Field(gt=0.0)] = 3.0,
+    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
 ) -> None:
     print("SCRAPING FIGHTERS LIST", end="\n\n")
     num_letters = len(letters)
@@ -286,7 +287,7 @@ if __name__ == "__main__":
         "-d",
         "--delay",
         type=float,
-        default=3.0,
+        default=DEFAULT_DELAY,
         dest="delay",
         help="set delay between requests",
     )
