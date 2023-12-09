@@ -29,6 +29,10 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
+def to_snake_case(s: str) -> str:
+    return s.strip().lower().replace(".", "").replace(" ", "_")
+
+
 class Header(CustomModel):
     full_name: CleanName
     nickname: Optional[CleanName] = None
@@ -213,15 +217,11 @@ class Fighter(CustomModel):
 
 
 class FighterDetailsScraper(CustomModel):
-    # TODO: Remove
-    # INT_STATS = ["strAcc", "strDef", "tdAcc", "tdDef"]
-    # FLOAT_STATS = ["slpm", "sapm", "tdAvg", "subAvg"]
-    # SCRAPER_ATTRS = ["header_data", "personal_info", "career_stats"]
-
     link: FighterLink
     name: str
 
     soup: Optional[BeautifulSoup] = None
+    scraped_data: Optional[Fighter] = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -262,98 +262,71 @@ class FighterDetailsScraper(CustomModel):
 
         return Header.model_validate(data_dict)
 
-    def scrape_personal_info(self) -> dict[str, str] | None:
-        if not hasattr(self, "soup"):
-            return
+    def scrape_personal_info(self) -> PersonalInfo:
+        if self.soup is None:
+            raise NoSoupError
 
         box_list = self.soup.find("ul", class_="b-list__box-list")
         if not isinstance(box_list, Tag):
-            return
+            raise MissingHTMLElementError("Box list (ul.b-list__box-list)")
 
         items = [li for li in box_list.find_all("li") if isinstance(li, Tag)]
         if len(items) != 5:
-            return
+            raise MissingHTMLElementError("List items (li)")
 
-        data_dict: dict[str, str] = {}
+        data_dict: dict[str, Any] = {}
 
+        # Actual scraping logic
         for item in items:
-            text = re.sub(r"\s+", " ", item.get_text())
-            field_name, field_value = [p.strip().strip("-").rstrip(".") for p in text.split(": ")]
+            text = re.sub(r"\s{2,}", " ", item.get_text())
+            field_name, field_value = [p.strip().strip("-") for p in text.split(": ")]
             if field_value != "":
                 data_dict[field_name.lower()] = field_value
 
-        # fix date of birth if necessary
-        if "dob" in data_dict:
-            data_dict["dateOfBirth"] = datetime.strptime(data_dict["dob"], "%b %d, %Y").strftime("%Y-%m-%d")
-            del data_dict["dob"]
+        # "Fix" field names
+        for field_name in ["height", "weight", "reach"]:
+            data_dict[f"{field_name}_str"] = data_dict.pop(field_name, None)
+        data_dict["date_of_birth_str"] = data_dict.pop("dob", None)
 
-        self.personal_info = data_dict if len(data_dict) > 0 else None
-        return self.personal_info
+        return PersonalInfo.model_validate(data_dict)
 
-    def scrape_career_stats(self) -> dict[str, int | float] | None:
-        if not hasattr(self, "soup"):
-            return
+    def scrape_career_stats(self) -> CareerStats:
+        if self.soup is None:
+            raise NoSoupError
 
-        box = self.soup.find("div", class_="b-list__info-box-left")
+        box = self.soup.find("div", class_="b-list__info-box-left clearfix")
         if not isinstance(box, Tag):
-            return
+            raise MissingHTMLElementError("Box (div.b-list__info-box-left.clearfix)")
 
         items = [li for li in box.find_all("li") if isinstance(li, Tag)]
-        raw_data: dict[str, str] = {}
+        if len(items) != 9:
+            raise MissingHTMLElementError("List items (li)")
 
+        data_dict: dict[str, Any] = {}
+
+        # Actual scraping logic
         for item in items:
-            text = re.sub(r"\s+", " ", item.get_text()).strip()
+            text = re.sub(r"\s{2,}", " ", item.get_text()).strip()
+            # One of the li's is empty. This deals with this case:
             if text == "":
                 continue
-
             field_name, field_value = text.split(": ")
-            raw_data[to_camel_case(field_name)] = field_value
+            data_dict[to_snake_case(field_name)] = field_value
 
-        if len(raw_data) != 8:
-            return
+        # "Fix" field names
+        for field_name in ["str_acc", "str_def", "td_acc", "td_def"]:
+            data_dict[f"{field_name}_str"] = data_dict.pop(field_name)
 
-        data_dict: dict[str, int | float] = {}
+        return CareerStats.model_validate(data_dict)
 
-        for field_name in FighterDetailsScraper.INT_STATS:
-            try:
-                data_dict[field_name] = int(raw_data[field_name].rstrip("%"))
-            except ValueError:
-                continue
-
-        for field_name in FighterDetailsScraper.FLOAT_STATS:
-            try:
-                data_dict[field_name] = float(raw_data[field_name])
-            except ValueError:
-                continue
-
-        # For some fighters, every career stat is equal to zero. This is
-        # garbage data, and will be disregarded.
-        if all(stat == 0 for stat in data_dict.values()):
-            return
-
-        self.career_stats = data_dict if len(data_dict) > 0 else None
-        return self.career_stats
-
-    def scrape(self) -> DataDict | None:
+    def scrape(self) -> Fighter:
         self.get_soup()
-
-        self.scrape_header()
-        self.scrape_personal_info()
-        self.scrape_career_stats()
-
-        valid_attrs = [
-            a
-            for a in FighterDetailsScraper.SCRAPER_ATTRS
-            if hasattr(self, a) and getattr(self, a) is not None
-        ]
-
-        if len(valid_attrs) == 0:
-            self.failed = True
-            return
-
-        self.scraped_data: DataDict = {}
-        for attr in valid_attrs:
-            self.scraped_data.update(getattr(self, attr))
+        data_dict: dict[str, Any] = {
+            "header": self.scrape_header(),
+            "personal_info": self.scrape_personal_info(),
+            "career_stats": self.scrape_career_stats(),
+        }
+        self.scraped_data = Fighter.model_validate(data_dict)
         return self.scraped_data
 
     # This method isn't really necessary. But it is useful for inspecting the
@@ -362,58 +335,6 @@ class FighterDetailsScraper(CustomModel):
         if not hasattr(self, "scraped_data"):
             return
         return json.dumps(self.scraped_data, indent=2)
-
-
-def scrape_details_by_letter(first_letter: str, delay: int = 10) -> ExitCode:
-    print("SCRAPING FIGHTER DETAILS", end="\n\n")
-
-    if not (first_letter.isalpha() and len(first_letter) == 1 and delay > 0):
-        print("Invalid arguments! No data was scraped.")
-        return ExitCode.ERROR
-
-    first_letter = first_letter.lower()
-    links = read_links(first_letter)
-    if links is None:
-        print("No link was found, then no data was scraped.")
-        return ExitCode.ERROR
-
-    print(f"Scraping fighter details for letter {first_letter.upper()}...", end="\n\n")
-
-    scraped_data: list[DataDict | None] = []
-    for i, link in enumerate(links, start=1):
-        print(f"Scraping fighter details from {link}...", end=" ")
-        scraper = FighterDetailsScraper(link)
-        scraped_data.append(scraper.scrape())
-        print("Failed." if scraper.failed else "Success!")
-        if i < len(links):
-            print(f"Continuing in {delay} seconds...", end="\n\n")
-            sleep(delay)
-
-    print()
-
-    num_fails = sum(d is None for d in scraped_data)
-    if num_fails == len(scraped_data):
-        print("Failure was complete! Nothing was scraped.")
-        return ExitCode.ERROR
-
-    print("Saving to JSON...", end=" ")
-    data_dir = Path(__file__).resolve().parents[1] / "data" / "fighter_details"
-    if not (data_dir.exists() and data_dir.is_dir() and os.access(data_dir, os.W_OK)):
-        print("Failed.")
-        return ExitCode.ERROR
-    with open(data_dir / f"{first_letter}.json", mode="w") as out_file:
-        json.dump(scraped_data, out_file, indent=2)
-    print("Done!")
-
-    total_fighters = len(scraped_data) - num_fails
-    if num_fails > 0:
-        print(
-            "Partial success.",
-            f"There were failures, but data for {total_fighters} fighters was scraped.",
-        )
-        return ExitCode.PARTIAL_SUCCESS
-    print(f"Complete success! Data for {total_fighters} fighters was scraped.")
-    return ExitCode.SUCCESS
 
 
 # example usage: python fighter_details.py 'b' -d 2
