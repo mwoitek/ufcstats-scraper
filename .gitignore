@@ -1,4 +1,5 @@
-__pycache__/
 .envrc
+__pycache__/
 links.sqlite
+log/*.log
 playground.*
