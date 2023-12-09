@@ -1,0 +1,21 @@
+{
+  "fullName": "Wanderlei Silva",
+  "nickname": "The Axe Murderer",
+  "wins": 35,
+  "losses": 13,
+  "draws": 1,
+  "noContests": 1,
+  "height": 71,
+  "weight": 205,
+  "reach": 74,
+  "stance": "Orthodox",
+  "dateOfBirth": "1976-07-03",
+  "slpm": 2.79,
+  "strAcc": 0.4,
+  "sapm": 2.19,
+  "strDef": 0.6,
+  "tdAvg": 0.97,
+  "tdAcc": 0.53,
+  "tdDef": 0.62,
+  "subAvg": 0.6
+}
