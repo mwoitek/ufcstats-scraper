@@ -298,14 +298,14 @@ if __name__ == "__main__":
         dest="letters",
         help="set letters to scrape",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
     letters = cast(str, args.letters)
     letters = letters.strip().lower()
 
     try:
-        with redirect_stdout(stdout if args.verbose else None):
+        with redirect_stdout(None if args.quiet else stdout):
             scrape_fighters_list(letters, args.delay)
     except ValidationError as exc:
         print("ERROR:")

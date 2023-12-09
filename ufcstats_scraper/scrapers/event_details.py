@@ -249,7 +249,7 @@ def scrape_event(event: DBEvent) -> None:
 
 
 @validate_call
-def scrape_event_details(select: LinkSelection, delay: int | float = 1) -> None:
+def scrape_event_details(select: LinkSelection, delay: float = 1.0) -> None:
     print("SCRAPING EVENT DETAILS", end="\n\n")
 
     print("Retrieving event links...", end=" ")
@@ -296,11 +296,11 @@ if __name__ == "__main__":
         dest="select",
         help="filter events in the database",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
     try:
-        with redirect_stdout(stdout if args.verbose else None):
+        with redirect_stdout(None if args.quiet else stdout):
             scrape_event_details(args.select, args.delay)
     except ValidationError as exc:
         logger.exception("Failed to run main function")

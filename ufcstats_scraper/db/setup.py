@@ -50,13 +50,13 @@ class DBCreator:
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for setting up the links database.")
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     parser.add_argument("-r", "--reset", action="store_true", dest="reset", help="reset links database")
-    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
     args = parser.parse_args()
 
     try:
         creator = DBCreator()
-        with redirect_stdout(stdout if args.verbose else None):
+        with redirect_stdout(None if args.quiet else stdout):
             if args.reset:
                 creator.drop()
             creator.create()

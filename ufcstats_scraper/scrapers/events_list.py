@@ -209,8 +209,8 @@ def scrape_events_list() -> None:
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for scraping the events list.")
-    parser.add_argument("-v", "--verbose", action="store_true", dest="verbose", help="show verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
-    with redirect_stdout(stdout if args.verbose else None):
+    with redirect_stdout(None if args.quiet else stdout):
         scrape_events_list()
