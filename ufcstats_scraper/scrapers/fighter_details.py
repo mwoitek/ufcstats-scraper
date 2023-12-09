@@ -1,9 +1,12 @@
-import json
 import re
 from argparse import ArgumentParser
 from datetime import date
 from datetime import datetime
+from json import dump
+from os import mkdir
+from pathlib import Path
 from typing import Any
+from typing import ClassVar
 from typing import Optional
 from typing import Self
 from typing import cast
@@ -215,8 +218,13 @@ class Fighter(CustomModel):
 
 
 class FighterDetailsScraper(CustomModel):
+    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighter_details"
+
     link: FighterLink
     name: str
+
+    tried: bool = False
+    success: Optional[bool] = None
 
     soup: Optional[BeautifulSoup] = None
     scraped_data: Optional[Fighter] = None
@@ -318,7 +326,11 @@ class FighterDetailsScraper(CustomModel):
         return CareerStats.model_validate(data_dict)
 
     def scrape(self) -> Fighter:
+        self.tried = True
+        self.success = False
+
         self.get_soup()
+
         try:
             data_dict: dict[str, Any] = {
                 "header": self.scrape_header(),
@@ -328,14 +340,25 @@ class FighterDetailsScraper(CustomModel):
             self.scraped_data = Fighter.model_validate(data_dict)
         except ValidationError as exc:
             raise NoScrapedDataError(self.link) from exc
+
         return self.scraped_data
 
-    # This method isn't really necessary. But it is useful for inspecting the
-    # results of `scrape`.
-    def get_json(self) -> str | None:
-        if not hasattr(self, "scraped_data"):
-            return
-        return json.dumps(self.scraped_data, indent=2)
+    def save_json(self, redundant=True) -> None:
+        if self.scraped_data is None:
+            raise NoScrapedDataError
+
+        try:
+            mkdir(FighterDetailsScraper.DATA_DIR, mode=0o755)
+        except FileExistsError:
+            pass
+
+        out_data = self.scraped_data.to_dict(redundant=redundant)
+        file_name = str(self.link).split("/")[-1]
+        out_file = FighterDetailsScraper.DATA_DIR / f"{file_name}.json"
+        with open(out_file, mode="w") as json_file:
+            dump(out_data, json_file, indent=2)
+
+        self.success = True
 
 
 if __name__ == "__main__":
