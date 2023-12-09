@@ -1,12 +1,8 @@
-import argparse
 import json
-import os
 import re
+from argparse import ArgumentParser
 from datetime import date
 from datetime import datetime
-from pathlib import Path
-from sys import exit
-from time import sleep
 from typing import Any
 from typing import Optional
 from typing import Self
@@ -16,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import Tag
 from pydantic import Field
+from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
@@ -26,6 +23,7 @@ from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
@@ -321,12 +319,15 @@ class FighterDetailsScraper(CustomModel):
 
     def scrape(self) -> Fighter:
         self.get_soup()
-        data_dict: dict[str, Any] = {
-            "header": self.scrape_header(),
-            "personal_info": self.scrape_personal_info(),
-            "career_stats": self.scrape_career_stats(),
-        }
-        self.scraped_data = Fighter.model_validate(data_dict)
+        try:
+            data_dict: dict[str, Any] = {
+                "header": self.scrape_header(),
+                "personal_info": self.scrape_personal_info(),
+                "career_stats": self.scrape_career_stats(),
+            }
+            self.scraped_data = Fighter.model_validate(data_dict)
+        except ValidationError as exc:
+            raise NoScrapedDataError(self.link) from exc
         return self.scraped_data
 
     # This method isn't really necessary. But it is useful for inspecting the
@@ -337,24 +338,16 @@ class FighterDetailsScraper(CustomModel):
         return json.dumps(self.scraped_data, indent=2)
 
 
-# example usage: python fighter_details.py 'b' -d 2
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script for scraping fighter details.")
-
-    parser.add_argument(
-        "letter",
-        type=str,
-        help="set letter to scrape",
-    )
+    parser = ArgumentParser(description="Script for scraping fighter details.")
     parser.add_argument(
         "-d",
         "--delay",
-        type=int,
+        type=float,
+        default=1.0,
         dest="delay",
-        default=10,
         help="set delay between requests",
     )
-
     args = parser.parse_args()
-    code = scrape_details_by_letter(args.letter, args.delay)
-    exit(code.value)
+
+    #
