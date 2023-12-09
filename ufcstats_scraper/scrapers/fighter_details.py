@@ -16,7 +16,6 @@ from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic import ValidationInfo
-from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
 from requests.exceptions import RequestException
@@ -24,6 +23,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.scrapers.common import CleanName
+from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
@@ -70,11 +70,7 @@ class PersonalInfo(CustomModel):
     reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
     stance: Optional[Stance] = None
     date_of_birth_str: Optional[str] = Field(default=None, exclude=True, pattern=r"[A-Za-z]{3} \d{2}, \d{4}")
-    date_of_birth: Optional[date] = Field(default=None, validate_default=True)
-
-    @field_serializer("date_of_birth", when_used="unless-none")
-    def serialize_date_of_birth(self, date_of_birth: date) -> str:
-        return date_of_birth.isoformat()
+    date_of_birth: Optional[CustomDate] = Field(default=None, validate_default=True)
 
     # NOTE: The next 3 validators are the same (or almost the same) as the
     # ones defined for the list scraper. I don't know how to reduce this
@@ -134,7 +130,11 @@ class PersonalInfo(CustomModel):
 
     @field_validator("date_of_birth")
     @classmethod
-    def fill_date_of_birth(cls, date_of_birth: Optional[date], info: ValidationInfo) -> Optional[date]:
+    def fill_date_of_birth(
+        cls,
+        date_of_birth: Optional[CustomDate],
+        info: ValidationInfo,
+    ) -> Optional[CustomDate]:
         if isinstance(date_of_birth, date):
             return date_of_birth
 

@@ -18,7 +18,6 @@ from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
 from pydantic import computed_field
-from pydantic import field_serializer
 from pydantic import model_validator
 from requests.exceptions import RequestException
 
@@ -26,6 +25,7 @@ from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
@@ -62,12 +62,8 @@ class Event(CustomModel):
 
     @computed_field
     @property
-    def date(self) -> datetime.date:
+    def date(self) -> CustomDate:
         return datetime.datetime.strptime(self.date_str, "%B %d, %Y").date()
-
-    @field_serializer("date")
-    def serialize_date(self, date: datetime.date) -> str:
-        return date.isoformat()
 
     def to_dict(self) -> dict[str, Any]:
         data_dict = self.model_dump(exclude_none=True)
