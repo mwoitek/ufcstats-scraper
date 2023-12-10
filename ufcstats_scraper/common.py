@@ -4,8 +4,19 @@ from pathlib import Path
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
+from rich.console import Console
+from rich.theme import Theme
 
 LOG_DIR = Path(__file__).resolve().parents[1] / "log"
+
+custom_theme = Theme(
+    {
+        "danger": "bold bright_red",
+        "info": "bright_blue",
+        "success": "bold bright_green",
+    }
+)
+console = Console(theme=custom_theme)
 
 
 class CustomLogger:

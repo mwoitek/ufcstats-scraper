@@ -1,9 +1,10 @@
 import sqlite3
 from argparse import ArgumentParser
-from contextlib import redirect_stdout
 from sys import exit
-from sys import stdout
 
+from rich.style import Style
+
+from ufcstats_scraper.common import console
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
@@ -25,27 +26,34 @@ class DBCreator:
             return sql_file.read().rstrip()
 
     def create_table(self, table: TableName) -> None:
-        print(f'Setting up "{table}" table:', end="\n\n")
         sql_script = DBCreator.read_sql_script(f"create_{table}.sql")
         self.cur.executescript(sql_script)
-        print(sql_script)
 
     def drop_table(self, table: TableName) -> None:
-        print(f'Removing "{table}" table:', end="\n\n")
         sql_script = DBCreator.read_sql_script(f"drop_{table}.sql")
         self.cur.executescript(sql_script)
-        print(sql_script)
 
     def create(self) -> None:
-        for i, table in enumerate(TABLES, start=1):
-            self.create_table(table)
-            if i < len(TABLES):
-                print()
+        console.rule("[b]CREATING TABLES", characters="=", style=Style(color="white"))
+        for table in TABLES:
+            console.print(f"Creating [b]{table}[/b] table[white]...", end=" ")
+            try:
+                self.create_table(table)
+                console.print("Done!", style="success")
+            except (FileNotFoundError, sqlite3.Error) as exc:
+                console.print("Failed!", style="danger")
+                raise exc from None
 
     def drop(self) -> None:
+        console.rule("[b]DROPPING TABLES", characters="=", style=Style(color="white"))
         for table in TABLES:
-            self.drop_table(table)
-            print()
+            console.print(f"Dropping [b]{table}[/b] table[white]...", end=" ")
+            try:
+                self.drop_table(table)
+                console.print("Done!", style="success")
+            except (FileNotFoundError, sqlite3.Error) as exc:
+                console.print("Failed!", style="danger")
+                raise exc from None
 
 
 if __name__ == "__main__":
@@ -54,13 +62,16 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--reset", action="store_true", dest="reset", help="reset links database")
     args = parser.parse_args()
 
+    console.quiet = args.quiet
+    console.rule("[bold bright_yellow]LINKS DB SETUP", characters="=", style=Style(color="bright_yellow"))
+
     try:
         creator = DBCreator()
-        with redirect_stdout(None if args.quiet else stdout):
-            if args.reset:
-                creator.drop()
-            creator.create()
-    except (FileNotFoundError, sqlite3.Error) as exc:
-        print("ERROR:")
-        print(exc)
+        if args.reset:
+            creator.drop()
+        creator.create()
+    except (FileNotFoundError, sqlite3.Error):
+        console.quiet = False
+        console.print("ERROR", style="danger", justify="center")
+        console.print_exception()
         exit(1)
