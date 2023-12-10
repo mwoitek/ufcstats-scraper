@@ -2,13 +2,11 @@
 
 import re
 from argparse import ArgumentParser
-from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
 from string import ascii_lowercase
 from sys import exit
-from sys import stdout
 from time import sleep
 from typing import Annotated
 from typing import Any
@@ -31,6 +29,7 @@ from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import console
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
@@ -242,42 +241,59 @@ class FightersListScraper(CustomModel):
 
 
 @validate_call
-def scrape_fighters_list(
-    letters: Annotated[str, Field(max_length=26, pattern=r"^[a-z]+$")] = ascii_lowercase,
-    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
-) -> None:
-    print("SCRAPING FIGHTERS LIST", end="\n\n")
-    num_letters = len(letters)
+def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
+    console.rule("[bold bright_yellow]FIGHTERS LIST", characters="=", style="bright_yellow")
 
-    for i, letter in enumerate(letters, start=1):
+    for i, letter in enumerate(ascii_lowercase, start=1):
+        letter_upper = letter.upper()
+        console.rule(f"[bold purple]{letter_upper}", characters="=", style="purple")
+        console.print(
+            f"Scraping fighter data for letter {letter_upper}...",
+            justify="center",
+            highlight=False,
+        )
+
         scraper = FightersListScraper(letter=letter)
-
-        print(f"Scraping fighter data for letter {letter.upper()}...", end=" ")
-
         try:
             scraper.scrape()
-            print("Done!")
+            console.print("Done!", style="success", justify="center")
         except ScraperError:
-            logger.exception(f"Failed to scrape data for {letter.upper()}")
-            print("Failed!")
-            if i < num_letters:
-                print(f"Continuing in {delay} second(s)...", end="\n\n")
+            logger.exception(f"Failed to scrape data for {letter_upper}")
+            console.print("Failed!", style="danger", justify="center")
+            console.print("No data was scraped.", style="danger", justify="center")
+            if i < 26:
+                console.print(
+                    f"Continuing in {delay} second(s)...",
+                    style="info",
+                    justify="center",
+                    highlight=False,
+                )
                 sleep(delay)
             continue
 
-        scraper.scraped_data = cast(list[Fighter], scraper.scraped_data)
-        print(f"Scraped data for {len(scraper.scraped_data)} fighters.")
+        fighters = cast(list[Fighter], scraper.scraped_data)
+        console.print(
+            f"Scraped data for {len(fighters)} fighters.",
+            style="success",
+            justify="center",
+            highlight=False,
+        )
 
-        print("Saving scraped data...", end=" ")
+        console.print("Saving scraped data...", justify="center", highlight=False)
         try:
             scraper.save_json()
-            print("Done!")
+            console.print("Done!", style="success", justify="center")
         except (FileNotFoundError, OSError):
             logger.exception("Failed to save data to JSON")
-            print("Failed!")
+            console.print("Failed!", style="danger", justify="center")
 
-        if i < num_letters:
-            print(f"Continuing in {delay} second(s)...", end="\n\n")
+        if i < 26:
+            console.print(
+                f"Continuing in {delay} second(s)...",
+                style="info",
+                justify="center",
+                highlight=False,
+            )
             sleep(delay)
 
 
@@ -291,24 +307,14 @@ if __name__ == "__main__":
         dest="delay",
         help="set delay between requests",
     )
-    parser.add_argument(
-        "-l",
-        "--letters",
-        type=str,
-        default=ascii_lowercase,
-        dest="letters",
-        help="set letters to scrape",
-    )
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
-    letters = cast(str, args.letters)
-    letters = letters.strip().lower()
-
+    console.quiet = args.quiet
     try:
-        with redirect_stdout(None if args.quiet else stdout):
-            scrape_fighters_list(letters, args.delay)
-    except ValidationError as exc:
-        print("ERROR:")
-        print(exc)
+        scrape_fighters_list(args.delay)
+    except ValidationError:
+        console.quiet = False
+        console.print("ERROR", style="danger", justify="center")
+        console.print_exception()
         exit(1)

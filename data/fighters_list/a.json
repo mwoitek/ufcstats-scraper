@@ -723,7 +723,7 @@
     "weight": 115,
     "reach": 58,
     "stance": "Orthodox",
-    "wins": 4,
+    "wins": 5,
     "losses": 0,
     "draws": 1,
     "currentChampion": false
@@ -1347,7 +1347,7 @@
     "reach": 62,
     "stance": "Orthodox",
     "wins": 14,
-    "losses": 6,
+    "losses": 7,
     "draws": 0,
     "currentChampion": false
   },
