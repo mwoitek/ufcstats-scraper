@@ -2,8 +2,6 @@ import sqlite3
 from argparse import ArgumentParser
 from sys import exit
 
-from rich.style import Style
-
 from ufcstats_scraper.common import console
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
@@ -34,7 +32,7 @@ class DBCreator:
         self.cur.executescript(sql_script)
 
     def create(self) -> None:
-        console.rule("[b]CREATING TABLES", characters="=", style=Style(color="white"))
+        console.rule("[b]CREATING TABLES", characters="=", style="white")
         for table in TABLES:
             console.print(f"Creating [b]{table}[/b] table[white]...", end=" ")
             try:
@@ -45,7 +43,7 @@ class DBCreator:
                 raise exc from None
 
     def drop(self) -> None:
-        console.rule("[b]DROPPING TABLES", characters="=", style=Style(color="white"))
+        console.rule("[b]DROPPING TABLES", characters="=", style="white")
         for table in TABLES:
             console.print(f"Dropping [b]{table}[/b] table[white]...", end=" ")
             try:
@@ -63,7 +61,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     console.quiet = args.quiet
-    console.rule("[bold bright_yellow]LINKS DB SETUP", characters="=", style=Style(color="bright_yellow"))
+    console.rule("[bold bright_yellow]LINKS DB SETUP", characters="=", style="bright_yellow")
 
     try:
         creator = DBCreator()
