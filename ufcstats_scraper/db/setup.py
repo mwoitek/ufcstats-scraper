@@ -32,25 +32,25 @@ class DBCreator:
         self.cur.executescript(sql_script)
 
     def create(self) -> None:
-        console.rule("[b]CREATING TABLES", characters="=", style="white")
+        console.rule("[bold purple]CREATING TABLES", characters="=", style="purple")
         for table in TABLES:
-            console.print(f"Creating [b]{table}[/b] table[white]...", end=" ")
+            console.print(f"Creating [b]{table}[/b] table...", justify="center", highlight=False)
             try:
                 self.create_table(table)
-                console.print("Done!", style="success")
+                console.print("Done!", style="success", justify="center")
             except (FileNotFoundError, sqlite3.Error) as exc:
-                console.print("Failed!", style="danger")
+                console.print("Failed!", style="danger", justify="center")
                 raise exc from None
 
     def drop(self) -> None:
-        console.rule("[b]DROPPING TABLES", characters="=", style="white")
+        console.rule("[bold purple]DROPPING TABLES", characters="=", style="purple")
         for table in TABLES:
-            console.print(f"Dropping [b]{table}[/b] table[white]...", end=" ")
+            console.print(f"Dropping [b]{table}[/b] table...", justify="center", highlight=False)
             try:
                 self.drop_table(table)
-                console.print("Done!", style="success")
+                console.print("Done!", style="success", justify="center")
             except (FileNotFoundError, sqlite3.Error) as exc:
-                console.print("Failed!", style="danger")
+                console.print("Failed!", style="danger", justify="center")
                 raise exc from None
 
 
