@@ -63,13 +63,19 @@ class LinksDB:
         self.cur = self.conn.cursor()
 
     def __del__(self) -> None:
-        self.conn.close()
+        try:
+            self.conn.close()
+        except AttributeError:
+            pass
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: Any) -> bool:
-        self.conn.close()
+        try:
+            self.conn.close()
+        except AttributeError:
+            pass
         return False
 
     def link_exists(self, table: TableName, link: AnyUrl) -> bool:
