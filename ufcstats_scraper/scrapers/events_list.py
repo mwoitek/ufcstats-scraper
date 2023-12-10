@@ -174,36 +174,41 @@ class EventsListScraper:
 
 def scrape_events_list() -> None:
     console.rule("[bold bright_yellow]EVENTS LIST", characters="=", style="bright_yellow")
-    console.print("[white]Scraping events list...", end=" ")
+    console.print("Scraping events list...", justify="center", highlight=False)
 
     scraper = EventsListScraper()
     try:
         scraper.scrape()
-        console.print("Done!", style="success")
-        console.print(f"Scraped data for {len(scraper.scraped_data)} events.", style="success")
+        console.print("Done!", style="success", justify="center")
+        console.print(
+            f"Scraped data for {len(scraper.scraped_data)} events.",
+            style="success",
+            justify="center",
+            highlight=False,
+        )
     except ScraperError:
         logger.exception("Failed to scrape events list")
-        console.print("Failed!", style="danger")
-        console.print("No data was scraped.", style="danger")
+        console.print("Failed!", style="danger", justify="center")
+        console.print("No data was scraped.", style="danger", justify="center")
         return
 
-    console.print("[white]Saving scraped data...", end=" ")
+    console.print("Saving scraped data...", justify="center", highlight=False)
     try:
         scraper.save_json()
-        console.print("Done!", style="success")
+        console.print("Done!", style="success", justify="center")
     except (FileNotFoundError, OSError):
         logger.exception("Failed to save data to JSON")
-        console.print("Failed!", style="danger")
+        console.print("Failed!", style="danger", justify="center")
         return
 
-    console.print("[white]Updating links DB...", end=" ")
+    console.print("Updating links DB...", justify="center", highlight=False)
     try:
         with LinksDB() as db:
             scraper.update_links_db(db)
-        console.print("Done!", style="success")
+        console.print("Done!", style="success", justify="center")
     except (DBNotSetupError, sqlite3.Error):
         logger.exception("Failed to update links DB")
-        console.print("Failed!", style="danger")
+        console.print("Failed!", style="danger", justify="center")
 
 
 if __name__ == "__main__":

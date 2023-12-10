@@ -1,5 +1,14 @@
 [
   {
+    "name": "UFC Fight Night: Song vs. Gutierrez",
+    "date": "2023-12-09",
+    "location": {
+      "city": "Las Vegas",
+      "state": "Nevada",
+      "country": "USA"
+    }
+  },
+  {
     "name": "UFC Fight Night: Dariush vs. Tsarukyan",
     "date": "2023-12-02",
     "location": {
