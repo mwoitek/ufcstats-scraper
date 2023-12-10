@@ -242,11 +242,11 @@ class FightersListScraper(CustomModel):
 
 @validate_call
 def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
-    console.rule("[bold bright_yellow]FIGHTERS LIST", characters="=", style="bright_yellow")
+    console.rule("[title]FIGHTERS LIST", characters="=", style="title")
 
     for i, letter in enumerate(ascii_lowercase, start=1):
         letter_upper = letter.upper()
-        console.rule(f"[bold purple]{letter_upper}", characters="=", style="purple")
+        console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
         console.print(
             f"Scraping fighter data for letter {letter_upper}...",
             justify="center",

@@ -173,7 +173,7 @@ class EventsListScraper:
 
 
 def scrape_events_list() -> None:
-    console.rule("[bold bright_yellow]EVENTS LIST", characters="=", style="bright_yellow")
+    console.rule("[title]EVENTS LIST", characters="=", style="title")
     console.print("Scraping events list...", justify="center", highlight=False)
 
     scraper = EventsListScraper()

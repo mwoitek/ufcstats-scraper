@@ -11,6 +11,8 @@ LOG_DIR = Path(__file__).resolve().parents[1] / "log"
 
 custom_theme = Theme(
     {
+        "title": "bold bright_yellow",
+        "subtitle": "bold purple",
         "danger": "bold bright_red",
         "info": "bright_blue",
         "success": "bold bright_green",
