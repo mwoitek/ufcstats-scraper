@@ -244,6 +244,9 @@ class FightersListScraper(CustomModel):
 def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
     console.rule("[title]FIGHTERS LIST", characters="=", style="title")
 
+    all_fighters: list[Fighter] = []
+    ok_letters: list[str] = []
+
     for i, letter in enumerate(ascii_lowercase, start=1):
         letter_upper = letter.upper()
         console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
@@ -279,6 +282,9 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             highlight=False,
         )
 
+        all_fighters.extend(fighters)
+        ok_letters.append(letter_upper)
+
         console.print("Saving scraped data...", justify="center", highlight=False)
         try:
             scraper.save_json()
@@ -295,6 +301,34 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
                 highlight=False,
             )
             sleep(delay)
+
+    console.rule("[subtitle]ALL LETTERS", characters="=", style="subtitle")
+
+    num_fighters = len(all_fighters)
+    if num_fighters == 0:
+        console.print("No data was scraped.", style="danger", justify="center")
+        return
+
+    letters_str = "all letters" if len(ok_letters) == 26 else "letters " + ", ".join(ok_letters)
+    console.print(f"Successfully scraped data for {letters_str}.", style="info", justify="center")
+    console.print(
+        f"Scraped data for {num_fighters} fighters.",
+        style="info",
+        justify="center",
+        highlight=False,
+    )
+
+    console.print("Saving combined data...", justify="center", highlight=False)
+    out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in all_fighters]
+    out_file = FightersListScraper.DATA_DIR / "combined.json"
+
+    try:
+        with open(out_file, mode="w") as json_file:
+            dump(out_data, json_file, indent=2)
+        console.print("Done!", style="success", justify="center")
+    except OSError:
+        logger.exception("Failed to save combined data to JSON")
+        console.print("Failed!", style="danger", justify="center")
 
 
 if __name__ == "__main__":
