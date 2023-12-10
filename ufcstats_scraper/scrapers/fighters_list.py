@@ -283,7 +283,7 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
         try:
             scraper.save_json()
             console.print("Done!", style="success", justify="center")
-        except (FileNotFoundError, OSError):
+        except OSError:
             logger.exception("Failed to save data to JSON")
             console.print("Failed!", style="danger", justify="center")
 

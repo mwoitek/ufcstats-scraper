@@ -196,7 +196,7 @@ def scrape_events_list() -> None:
     try:
         scraper.save_json()
         console.print("Done!", style="success", justify="center")
-    except (FileNotFoundError, OSError):
+    except OSError:
         logger.exception("Failed to save data to JSON")
         console.print("Failed!", style="danger", justify="center")
         return

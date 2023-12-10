@@ -393,7 +393,7 @@ def scrape_fighter(link: str, name: str) -> None:
     try:
         scraper.save_json()
         print("Done!")
-    except (FileNotFoundError, OSError):
+    except OSError:
         logger.exception("Failed to save data to JSON")
         print("Failed!")
 

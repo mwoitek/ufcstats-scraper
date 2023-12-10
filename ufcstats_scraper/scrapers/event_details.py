@@ -226,7 +226,7 @@ def scrape_event(event: DBEvent) -> None:
     try:
         scraper.save_json()
         print("Done!")
-    except (FileNotFoundError, OSError):
+    except OSError:
         logger.exception("Failed to save data to JSON")
         print("Failed!")
         return
