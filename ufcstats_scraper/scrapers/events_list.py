@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 from json import dump
 from os import mkdir
 from pathlib import Path
+from sys import exit
 from typing import Any
 from typing import Optional
 from typing import Self
@@ -73,7 +74,8 @@ class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
     DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "events_list"
 
-    def __init__(self) -> None:
+    def __init__(self, db: LinksDB) -> None:
+        self.db = db
         self.success = False
 
     def get_soup(self) -> BeautifulSoup:
@@ -165,9 +167,9 @@ class EventsListScraper:
 
         self.success = True
 
-    def update_links_db(self, db: LinksDB) -> None:
+    def update_links_db(self) -> None:
         if self.success:
-            db.insert_events(self.scraped_data)
+            self.db.insert_events(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
@@ -176,7 +178,14 @@ def scrape_events_list() -> None:
     console.rule("[title]EVENTS LIST", characters="=", style="title")
     console.print("Scraping events list...", justify="center", highlight=False)
 
-    scraper = EventsListScraper()
+    try:
+        db = LinksDB()
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to create DB object")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc from None
+
+    scraper = EventsListScraper(db)
     try:
         scraper.scrape()
         console.print("Done!", style="success", justify="center")
@@ -186,29 +195,29 @@ def scrape_events_list() -> None:
             justify="center",
             highlight=False,
         )
-    except ScraperError:
+    except ScraperError as exc:
         logger.exception("Failed to scrape events list")
         console.print("Failed!", style="danger", justify="center")
         console.print("No data was scraped.", style="danger", justify="center")
-        return
+        raise exc from None
 
     console.print("Saving scraped data...", justify="center", highlight=False)
     try:
         scraper.save_json()
         console.print("Done!", style="success", justify="center")
-    except OSError:
+    except OSError as exc:
         logger.exception("Failed to save data to JSON")
         console.print("Failed!", style="danger", justify="center")
-        return
+        raise exc from None
 
     console.print("Updating links DB...", justify="center", highlight=False)
     try:
-        with LinksDB() as db:
-            scraper.update_links_db(db)
+        scraper.update_links_db()
         console.print("Done!", style="success", justify="center")
-    except (DBNotSetupError, sqlite3.Error):
+    except sqlite3.Error as exc:
         logger.exception("Failed to update links DB")
         console.print("Failed!", style="danger", justify="center")
+        raise exc from None
 
 
 if __name__ == "__main__":
@@ -217,4 +226,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     console.quiet = args.quiet
-    scrape_events_list()
+    try:
+        scrape_events_list()
+    except (DBNotSetupError, OSError, ScraperError, sqlite3.Error):
+        console.quiet = False
+        console.print_exception()
+        exit(1)
