@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Optional
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -22,11 +23,14 @@ console = Console(theme=custom_theme)
 
 
 class CustomLogger:
-    def __init__(self, name: str, file_name: str) -> None:
+    def __init__(self, name: str, file_name: Optional[str] = None) -> None:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
 
-        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log")
+        if file_name is None:
+            file_name = name
+
+        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log", mode="w")
         self.handler.setLevel(logging.DEBUG)
 
         formatter = logging.Formatter(

@@ -38,7 +38,7 @@ from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
-logger = CustomLogger("event_details", "event_details")
+logger = CustomLogger("event_details")
 
 
 class Fighter(CustomModel):

@@ -31,7 +31,7 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 
-logger = CustomLogger("events_list", "events_list")
+logger = CustomLogger("events_list")
 
 
 class Location(CustomModel):

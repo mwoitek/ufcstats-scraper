@@ -31,7 +31,7 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 
-logger = CustomLogger("fighter_details", "fighter_details")
+logger = CustomLogger("fighter_details")
 
 
 def to_snake_case(s: str) -> str:
