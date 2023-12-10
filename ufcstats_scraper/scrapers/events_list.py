@@ -2,11 +2,9 @@ import datetime
 import re
 import sqlite3
 from argparse import ArgumentParser
-from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
-from sys import stdout
 from typing import Any
 from typing import Optional
 from typing import Self
@@ -23,6 +21,7 @@ from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import console
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import CustomDate
@@ -174,37 +173,37 @@ class EventsListScraper:
 
 
 def scrape_events_list() -> None:
-    print("SCRAPING EVENTS LIST...", end=" ")
+    console.rule("[bold bright_yellow]EVENTS LIST", characters="=", style="bright_yellow")
+    console.print("[white]Scraping events list...", end=" ")
 
     scraper = EventsListScraper()
     try:
         scraper.scrape()
+        console.print("Done!", style="success")
+        console.print(f"Scraped data for {len(scraper.scraped_data)} events.", style="success")
     except ScraperError:
         logger.exception("Failed to scrape events list")
-        print("Failed!")
-        print("No data was scraped.")
+        console.print("Failed!", style="danger")
+        console.print("No data was scraped.", style="danger")
         return
 
-    print("Done!")
-    print(f"Scraped data for {len(scraper.scraped_data)} events.")
-
-    print("Saving scraped data...", end=" ")
+    console.print("[white]Saving scraped data...", end=" ")
     try:
         scraper.save_json()
-        print("Done!")
+        console.print("Done!", style="success")
     except (FileNotFoundError, OSError):
         logger.exception("Failed to save data to JSON")
-        print("Failed!")
+        console.print("Failed!", style="danger")
         return
 
-    print("Updating links DB...", end=" ")
+    console.print("[white]Updating links DB...", end=" ")
     try:
         with LinksDB() as db:
             scraper.update_links_db(db)
-        print("Done!")
+        console.print("Done!", style="success")
     except (DBNotSetupError, sqlite3.Error):
         logger.exception("Failed to update links DB")
-        print("Failed!")
+        console.print("Failed!", style="danger")
 
 
 if __name__ == "__main__":
@@ -212,5 +211,5 @@ if __name__ == "__main__":
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
-    with redirect_stdout(None if args.quiet else stdout):
-        scrape_events_list()
+    console.quiet = args.quiet
+    scrape_events_list()
