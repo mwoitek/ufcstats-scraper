@@ -97,30 +97,30 @@ class LinksDB:
         return self.cur.fetchone() is not None
 
     def insert_events(self, events: Collection["Event"]) -> None:
-        logger.debug(f"insert_events: Got {len(events)} events to insert into DB")
+        logger.debug(f"Got {len(events)} events to insert into DB")
         query = "INSERT INTO event (link, name) VALUES (:link, :name)"
         new_events = filter(lambda e: not self.link_exists("event", e.link), events)
         for event in new_events:
             params = {"link": event.link, "name": event.name}
             self.cur.execute(query, params)
-            logger.debug(f"insert_events: New event {params}")
+            logger.debug(f"New event: {params}")
         self.conn.commit()
 
     def insert_fighters(self, fighters: Collection[Fighter]) -> None:
-        logger.debug(f"insert_fighters: Got {len(fighters)} fighters to insert into DB")
+        logger.debug(f"Got {len(fighters)} fighters to insert into DB")
         query = "INSERT INTO fighter (link, name) VALUES (:link, :name)"
         new_fighters = filter(lambda f: not self.link_exists("fighter", f.link), fighters)
         for fighter in new_fighters:
             params = {"link": fighter.link, "name": fighter.name}
             self.cur.execute(query, params)
-            logger.debug(f"insert_fighters: New fighter {params}")
+            logger.debug(f"New fighter: {params}")
         self.conn.commit()
 
     def insert_fights(self, fights: Collection["Fight"]) -> None:
         fighters = get_unique_fighters(fights)
         fighter_ids = self.read_fighter_ids(fighters)
 
-        logger.debug(f"insert_fights: Got {len(fights)} fights to insert into DB")
+        logger.debug(f"Got {len(fights)} fights to insert into DB")
         query = (
             "INSERT INTO fight (link, event_id, fighter_1_id, fighter_2_id) "
             "VALUES (:link, :event_id, :fighter_1_id, :fighter_2_id)"
@@ -134,7 +134,7 @@ class LinksDB:
                 "fighter_2_id": fighter_ids[fight.fighter_2],
             }
             self.cur.execute(query, params)
-            logger.debug(f"insert_fights: New fight {params}")
+            logger.debug(f"New fight: {params}")
         self.conn.commit()
 
     def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
@@ -150,12 +150,12 @@ class LinksDB:
 
     def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
         fighter_ids: dict["EventFighter", int] = {}
-        logger.debug(f"read_fighter_ids: Need to find IDs for {len(fighters)} fighters")
+        logger.debug(f"Need to find IDs for {len(fighters)} fighters")
         query = "SELECT id FROM fighter WHERE link = :link"
         for fighter in fighters:
             self.cur.execute(query, {"link": fighter.link})
             fighter_ids[fighter] = self.cur.fetchone()[0]
-        logger.debug(f"read_fighter_ids: Found IDs for {len(fighter_ids)} fighters")
+        logger.debug(f"Found IDs for {len(fighter_ids)} fighters")
         return fighter_ids
 
     # TODO: Generalize
