@@ -230,7 +230,7 @@ class FightersListScraper(CustomModel):
         try:
             mkdir(FightersListScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
-            pass
+            logger.info(f"Directory {FightersListScraper.DATA_DIR} already exists")
 
         out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in self.scraped_data]
         out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
@@ -289,9 +289,12 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
         try:
             scraper.save_json()
             console.print("Done!", style="success", justify="center")
-        except OSError:
+        except OSError as exc:
             logger.exception("Failed to save data to JSON")
             console.print("Failed!", style="danger", justify="center")
+            # If there's a failure to save data, it's very likely that it
+            # will keep happening. Then in this case I'll stop execution.
+            raise exc from None
 
         if i < 26:
             console.print(
@@ -306,8 +309,9 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
 
     num_fighters = len(all_fighters)
     if num_fighters == 0:
+        logger.error("Failed to scrape data for all letters")
         console.print("No data was scraped.", style="danger", justify="center")
-        return
+        raise NoScrapedDataError(FightersListScraper.BASE_URL)
 
     letters_str = "all letters" if len(ok_letters) == 26 else "letters " + ", ".join(ok_letters)
     console.print(f"Successfully scraped data for {letters_str}.", style="info", justify="center")
@@ -326,9 +330,10 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
         console.print("Done!", style="success", justify="center")
-    except OSError:
+    except OSError as exc:
         logger.exception("Failed to save combined data to JSON")
         console.print("Failed!", style="danger", justify="center")
+        raise exc from None
 
 
 if __name__ == "__main__":
@@ -347,8 +352,8 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighters_list(args.delay)
-    except ValidationError:
+    except (OSError, ValidationError):
+        logger.exception("Failed to run main function")
         console.quiet = False
-        console.print("ERROR", style="danger", justify="center")
         console.print_exception()
         exit(1)
