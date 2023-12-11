@@ -1,6 +1,5 @@
-# TODO: Update links DB
-
 import re
+import sqlite3
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
@@ -30,6 +29,8 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.db.db import LinksDB
+from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
@@ -132,9 +133,12 @@ class FightersListScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighters_list"
 
     letter: str = Field(..., pattern=r"[a-z]{1}")
+    db: LinksDB
+
     soup: Optional[BeautifulSoup] = None
     rows: Optional[list[Tag]] = None
     scraped_data: Optional[list[Fighter]] = None
+
     success: bool = False
 
     def get_soup(self) -> BeautifulSoup:
@@ -239,15 +243,29 @@ class FightersListScraper(CustomModel):
 
         self.success = True
 
+    def update_links_db(self) -> None:
+        if self.success:
+            self.scraped_data = cast(list[Fighter], self.scraped_data)
+            self.db.insert_fighters(self.scraped_data)
+        else:
+            logger.info("DB was not updated since scraped data was not saved to JSON")
+
 
 @validate_call
 def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
     console.rule("[title]FIGHTERS LIST", characters="=", style="title")
 
+    try:
+        db = LinksDB()
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to create DB object")
+        raise exc from None
+
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
 
     for i, letter in enumerate(ascii_lowercase, start=1):
+        # TODO: Create scrape_letter function
         letter_upper = letter.upper()
         console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
         console.print(
@@ -256,7 +274,7 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             highlight=False,
         )
 
-        scraper = FightersListScraper(letter=letter)
+        scraper = FightersListScraper(letter=letter, db=db)
         try:
             scraper.scrape()
             console.print("Done!", style="success", justify="center")
@@ -282,9 +300,6 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             highlight=False,
         )
 
-        all_fighters.extend(fighters)
-        ok_letters.append(letter_upper)
-
         console.print("Saving scraped data...", justify="center", highlight=False)
         try:
             scraper.save_json()
@@ -295,6 +310,18 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             # If there's a failure to save data, it's very likely that it
             # will keep happening. Then in this case I'll stop execution.
             raise exc from None
+
+        console.print("Updating links DB...", justify="center", highlight=False)
+        try:
+            scraper.update_links_db()
+            console.print("Done!", style="success", justify="center")
+        except sqlite3.Error as exc:
+            logger.exception("Failed to update links DB")
+            console.print("Failed!", style="danger", justify="center")
+            raise exc from None
+
+        all_fighters.extend(fighters)
+        ok_letters.append(letter_upper)
 
         if i < 26:
             console.print(
@@ -352,7 +379,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighters_list(args.delay)
-    except (OSError, ValidationError):
+    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
