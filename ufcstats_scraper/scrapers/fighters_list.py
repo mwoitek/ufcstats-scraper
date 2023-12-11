@@ -110,20 +110,20 @@ class Fighter(CustomModel):
         reach = int(match.group(1))
         return reach
 
-    @model_validator(mode="after")
-    def check_full_name(self) -> Self:
+    @property
+    def name(self) -> str:
         first_name = self.first_name
         if first_name is None:
             first_name = ""
-
         last_name = self.last_name
         if last_name is None:
             last_name = ""
+        return (first_name + " " + last_name).strip()
 
-        full_name = (first_name + " " + last_name).strip()
-        if full_name == "":
+    @model_validator(mode="after")
+    def check_name(self) -> Self:
+        if self.name == "":
             raise ValueError("fighter has no name")
-
         return self
 
 
