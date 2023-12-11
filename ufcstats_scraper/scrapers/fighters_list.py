@@ -60,6 +60,22 @@ class Fighter(CustomModel):
     draws: int = Field(..., ge=0)
     current_champion: bool = False
 
+    @property
+    def name(self) -> str:
+        first_name = self.first_name
+        if first_name is None:
+            first_name = ""
+        last_name = self.last_name
+        if last_name is None:
+            last_name = ""
+        return (first_name + " " + last_name).strip()
+
+    @model_validator(mode="after")
+    def check_name(self) -> Self:
+        if self.name == "":
+            raise ValueError("fighter has no name")
+        return self
+
     @field_validator("height")
     @classmethod
     def fill_height(cls, height: Optional[int], info: ValidationInfo) -> Optional[int]:
@@ -110,22 +126,6 @@ class Fighter(CustomModel):
 
         reach = int(match.group(1))
         return reach
-
-    @property
-    def name(self) -> str:
-        first_name = self.first_name
-        if first_name is None:
-            first_name = ""
-        last_name = self.last_name
-        if last_name is None:
-            last_name = ""
-        return (first_name + " " + last_name).strip()
-
-    @model_validator(mode="after")
-    def check_name(self) -> Self:
-        if self.name == "":
-            raise ValueError("fighter has no name")
-        return self
 
 
 class FightersListScraper(CustomModel):
@@ -252,76 +252,71 @@ class FightersListScraper(CustomModel):
 
 
 @validate_call
-def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
-    console.rule("[title]FIGHTERS LIST", characters="=", style="title")
+def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fighter]:
+    letter_upper = letter.upper()
+    console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
+    console.print(f"Scraping fighter data for letter {letter_upper}...", justify="center", highlight=False)
 
     try:
         db = LinksDB()
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
+        console.print("Failed!", style="danger", justify="center")
         raise exc from None
+
+    scraper = FightersListScraper(letter=letter, db=db)
+    try:
+        scraper.scrape()
+        console.print("Done!", style="success", justify="center")
+    except ScraperError as exc:
+        logger.exception(f"Failed to scrape data for {letter_upper}")
+        console.print("Failed!", style="danger", justify="center")
+        console.print("No data was scraped.", style="danger", justify="center")
+        raise exc from None
+
+    fighters = cast(list[Fighter], scraper.scraped_data)
+    console.print(
+        f"Scraped data for {len(fighters)} fighters.",
+        style="success",
+        justify="center",
+        highlight=False,
+    )
+
+    console.print("Saving scraped data...", justify="center", highlight=False)
+    try:
+        scraper.save_json()
+        console.print("Done!", style="success", justify="center")
+    except OSError as exc:
+        logger.exception(f"Failed to save data to JSON for {letter_upper}")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc from None
+
+    console.print("Updating links DB...", justify="center", highlight=False)
+    try:
+        scraper.update_links_db()
+        console.print("Done!", style="success", justify="center")
+    except sqlite3.Error as exc:
+        logger.exception("Failed to update links DB")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc from None
+
+    return fighters
+
+
+@validate_call
+def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
+    console.rule("[title]FIGHTERS LIST", characters="=", style="title")
 
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
 
     for i, letter in enumerate(ascii_lowercase, start=1):
-        # TODO: Create scrape_letter function
-        letter_upper = letter.upper()
-        console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
-        console.print(
-            f"Scraping fighter data for letter {letter_upper}...",
-            justify="center",
-            highlight=False,
-        )
-
-        scraper = FightersListScraper(letter=letter, db=db)
         try:
-            scraper.scrape()
-            console.print("Done!", style="success", justify="center")
+            fighters = scrape_letter(letter)
+            all_fighters.extend(fighters)
+            ok_letters.append(letter.upper())
         except ScraperError:
-            logger.exception(f"Failed to scrape data for {letter_upper}")
-            console.print("Failed!", style="danger", justify="center")
-            console.print("No data was scraped.", style="danger", justify="center")
-            if i < 26:
-                console.print(
-                    f"Continuing in {delay} second(s)...",
-                    style="info",
-                    justify="center",
-                    highlight=False,
-                )
-                sleep(delay)
-            continue
-
-        fighters = cast(list[Fighter], scraper.scraped_data)
-        console.print(
-            f"Scraped data for {len(fighters)} fighters.",
-            style="success",
-            justify="center",
-            highlight=False,
-        )
-
-        console.print("Saving scraped data...", justify="center", highlight=False)
-        try:
-            scraper.save_json()
-            console.print("Done!", style="success", justify="center")
-        except OSError as exc:
-            logger.exception(f"Failed to save data to JSON for {letter_upper}")
-            console.print("Failed!", style="danger", justify="center")
-            # If there's a failure to save data, it's very likely that it
-            # will keep happening. Then in this case I'll stop execution.
-            raise exc from None
-
-        console.print("Updating links DB...", justify="center", highlight=False)
-        try:
-            scraper.update_links_db()
-            console.print("Done!", style="success", justify="center")
-        except sqlite3.Error as exc:
-            logger.exception("Failed to update links DB")
-            console.print("Failed!", style="danger", justify="center")
-            raise exc from None
-
-        all_fighters.extend(fighters)
-        ok_letters.append(letter_upper)
+            pass
 
         if i < 26:
             console.print(
@@ -379,7 +374,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighters_list(args.delay)
-    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
