@@ -70,13 +70,14 @@ class EventDetailsScraper(CustomModel):
     id: int
     link: EventLink
     name: str
-
-    tried: bool = False
-    success: Optional[bool] = None
+    db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
     rows: Optional[list[Tag]] = None
     scraped_data: Optional[list[Fight]] = None
+
+    tried: bool = False
+    success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -170,17 +171,17 @@ class EventDetailsScraper(CustomModel):
 
         self.success = True
 
-    def db_update_event(self, db: LinksDB) -> None:
+    def db_update_event(self) -> None:
         if not self.tried:
             logger.info("Event was not updated since no attempt was made to scrape data")
             return
         self.success = cast(bool, self.success)
-        db.update_event(self.id, self.tried, self.success)
+        self.db.update_status("event", self.id, self.tried, self.success)
 
-    def db_insert_fights(self, db: LinksDB) -> None:
+    def db_insert_fights(self) -> None:
         if self.success:
             self.scraped_data = cast(list[Fight], self.scraped_data)
-            db.insert_fights(self.scraped_data)
+            self.db.insert_fights(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
