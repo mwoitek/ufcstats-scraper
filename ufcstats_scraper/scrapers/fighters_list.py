@@ -290,7 +290,7 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             scraper.save_json()
             console.print("Done!", style="success", justify="center")
         except OSError as exc:
-            logger.exception("Failed to save data to JSON")
+            logger.exception(f"Failed to save data to JSON for {letter_upper}")
             console.print("Failed!", style="danger", justify="center")
             # If there's a failure to save data, it's very likely that it
             # will keep happening. Then in this case I'll stop execution.

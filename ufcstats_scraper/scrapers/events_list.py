@@ -158,7 +158,7 @@ class EventsListScraper:
         try:
             mkdir(EventsListScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
-            pass
+            logger.info(f"Directory {EventsListScraper.DATA_DIR} already exists")
 
         out_data = [e.to_dict() for e in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
@@ -229,6 +229,7 @@ if __name__ == "__main__":
     try:
         scrape_events_list()
     except (DBNotSetupError, OSError, ScraperError, sqlite3.Error):
+        logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
         exit(1)
