@@ -40,7 +40,6 @@ sqlite3.register_adapter(AnyUrl, adapt_url)
 sqlite3.register_adapter(datetime, adapt_datetime)
 
 
-# FIXME
 def is_db_setup() -> bool:
     if not DB_PATH.exists():
         return False
@@ -158,9 +157,13 @@ class LinksDB:
         logger.debug(f"Found IDs for {len(fighter_ids)} fighters")
         return fighter_ids
 
-    # TODO: Generalize
-    def update_event(self, id: int, tried: bool, success: bool) -> None:
-        query = "UPDATE event SET updated_at = :updated_at, tried = :tried, success = :success WHERE id = :id"
+    def update_status(self, table: TableName, id: int, tried: bool, success: bool) -> None:
+        query = (
+            f"UPDATE {table} SET updated_at = :updated_at, tried = :tried, success = :success "
+            "WHERE id = :id"
+        )
         params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
         self.cur.execute(query, params)
+        logger.debug(f"Update {table} table")
+        logger.debug(f"New status: {params}")
         self.conn.commit()

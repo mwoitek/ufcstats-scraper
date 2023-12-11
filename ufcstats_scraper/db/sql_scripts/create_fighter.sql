@@ -4,10 +4,8 @@ CREATE TABLE IF NOT EXISTS fighter (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   link VARCHAR(80) NOT NULL UNIQUE,
   name VARCHAR(40) NOT NULL,
-  tried_list INTEGER NOT NULL DEFAULT 0,
-  success_list INTEGER,
-  tried_details INTEGER NOT NULL DEFAULT 0,
-  success_details INTEGER
+  tried INTEGER NOT NULL DEFAULT 0,
+  success INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_fighter_link ON fighter (link);
