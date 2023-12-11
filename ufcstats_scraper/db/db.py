@@ -1,12 +1,14 @@
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Collection
 from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Self
+from typing import Union
 
 from pydantic import AnyUrl
 
+from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import LinkSelection
@@ -16,8 +18,14 @@ from ufcstats_scraper.db.models import DBEvent
 
 if TYPE_CHECKING:
     from ufcstats_scraper.scrapers.event_details import Fight
-    from ufcstats_scraper.scrapers.event_details import Fighter
+    from ufcstats_scraper.scrapers.event_details import Fighter as EventFighter
     from ufcstats_scraper.scrapers.events_list import Event
+    from ufcstats_scraper.scrapers.fighters_list import Fighter as ListFighter
+
+
+Fighter = Union["EventFighter", "ListFighter"]
+
+logger = CustomLogger("db")
 
 
 def adapt_url(url: AnyUrl) -> str:
@@ -32,6 +40,7 @@ sqlite3.register_adapter(AnyUrl, adapt_url)
 sqlite3.register_adapter(datetime, adapt_datetime)
 
 
+# FIXME
 def is_db_setup() -> bool:
     if not DB_PATH.exists():
         return False
@@ -46,11 +55,12 @@ def is_db_setup() -> bool:
     return len(results) == len(TABLES)
 
 
-def get_unique_fighters(fights: Iterable["Fight"]) -> set["Fighter"]:
-    fighters: set["Fighter"] = set()
+def get_unique_fighters(fights: Collection["Fight"]) -> set["EventFighter"]:
+    fighters: set["EventFighter"] = set()
     for fight in fights:
         fighters.add(fight.fighter_1)
         fighters.add(fight.fighter_2)
+    logger.debug(f"Got {len(fighters)} unique fighters from {len(fights)} fights")
     return fighters
 
 
@@ -61,10 +71,12 @@ class LinksDB:
 
         self.conn = sqlite3.connect(DB_PATH)
         self.cur = self.conn.cursor()
+        logger.info("Opened DB connection")
 
     def __del__(self) -> None:
         try:
             self.conn.close()
+            logger.info("Closed DB connection")
         except AttributeError:
             pass
 
@@ -74,6 +86,7 @@ class LinksDB:
     def __exit__(self, *exc: Any) -> bool:
         try:
             self.conn.close()
+            logger.info("Closed DB connection")
         except AttributeError:
             pass
         return False
@@ -83,25 +96,31 @@ class LinksDB:
         self.cur.execute(query, {"link": link})
         return self.cur.fetchone() is not None
 
-    def insert_events(self, events: Iterable["Event"]) -> None:
+    def insert_events(self, events: Collection["Event"]) -> None:
+        logger.debug(f"insert_events: Got {len(events)} events to insert into DB")
         query = "INSERT INTO event (link, name) VALUES (:link, :name)"
         new_events = filter(lambda e: not self.link_exists("event", e.link), events)
         for event in new_events:
-            self.cur.execute(query, {"link": event.link, "name": event.name})
+            params = {"link": event.link, "name": event.name}
+            self.cur.execute(query, params)
+            logger.debug(f"insert_events: New event {params}")
         self.conn.commit()
 
-    def insert_fighters(self, fighters: Iterable["Fighter"]) -> None:
+    def insert_fighters(self, fighters: Collection[Fighter]) -> None:
+        logger.debug(f"insert_fighters: Got {len(fighters)} fighters to insert into DB")
         query = "INSERT INTO fighter (link, name) VALUES (:link, :name)"
         new_fighters = filter(lambda f: not self.link_exists("fighter", f.link), fighters)
         for fighter in new_fighters:
-            self.cur.execute(query, {"link": fighter.link, "name": fighter.name})
+            params = {"link": fighter.link, "name": fighter.name}
+            self.cur.execute(query, params)
+            logger.debug(f"insert_fighters: New fighter {params}")
         self.conn.commit()
 
-    def insert_fights(self, fights: Iterable["Fight"]) -> None:
+    def insert_fights(self, fights: Collection["Fight"]) -> None:
         fighters = get_unique_fighters(fights)
-        self.insert_fighters(fighters)
         fighter_ids = self.read_fighter_ids(fighters)
 
+        logger.debug(f"insert_fights: Got {len(fights)} fights to insert into DB")
         query = (
             "INSERT INTO fight (link, event_id, fighter_1_id, fighter_2_id) "
             "VALUES (:link, :event_id, :fighter_1_id, :fighter_2_id)"
@@ -115,6 +134,7 @@ class LinksDB:
                 "fighter_2_id": fighter_ids[fight.fighter_2],
             }
             self.cur.execute(query, params)
+            logger.debug(f"insert_fights: New fight {params}")
         self.conn.commit()
 
     def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
@@ -128,14 +148,17 @@ class LinksDB:
                 pass
         return [DBEvent(*row) for row in self.cur.execute(query)]
 
-    def read_fighter_ids(self, fighters: Iterable["Fighter"]) -> dict["Fighter", int]:
-        fighter_ids: dict["Fighter", int] = {}
+    def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
+        fighter_ids: dict["EventFighter", int] = {}
+        logger.debug(f"read_fighter_ids: Need to find IDs for {len(fighters)} fighters")
         query = "SELECT id FROM fighter WHERE link = :link"
         for fighter in fighters:
             self.cur.execute(query, {"link": fighter.link})
             fighter_ids[fighter] = self.cur.fetchone()[0]
+        logger.debug(f"read_fighter_ids: Found IDs for {len(fighter_ids)} fighters")
         return fighter_ids
 
+    # TODO: Generalize
     def update_event(self, id: int, tried: bool, success: bool) -> None:
         query = "UPDATE event SET updated_at = :updated_at, tried = :tried, success = :success WHERE id = :id"
         params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
