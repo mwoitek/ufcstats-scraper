@@ -1,4 +1,5 @@
 import re
+import sqlite3
 from datetime import date
 from datetime import datetime
 from json import dump
@@ -22,6 +23,10 @@ from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import console
+from ufcstats_scraper.db.db import LinksDB
+from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.models import DBFighter
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
@@ -39,7 +44,7 @@ def to_snake_case(s: str) -> str:
 
 
 class Header(CustomModel):
-    full_name: CleanName
+    name: CleanName
     nickname: Optional[CleanName] = None
     record_str: str = Field(..., exclude=True, pattern=r"Record: \d+-\d+-\d+( [(]\d+ NC[)])?")
     wins: Optional[int] = Field(default=None, ge=0)
@@ -228,14 +233,16 @@ class Fighter(CustomModel):
 class FighterDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighter_details"
 
+    id: int
     link: FighterLink
     name: str
-
-    tried: bool = False
-    success: Optional[bool] = None
+    db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
     scraped_data: Optional[Fighter] = None
+
+    tried: bool = False
+    success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -258,7 +265,7 @@ class FighterDetailsScraper(CustomModel):
         name_span = self.soup.find("span", class_="b-content__title-highlight")
         if not isinstance(name_span, Tag):
             raise MissingHTMLElementError("Name span (span.b-content__title-highlight)")
-        data_dict: dict[str, Any] = {"full_name": name_span.get_text()}
+        data_dict: dict[str, Any] = {"name": name_span.get_text()}
 
         # Scrape nickname
         nickname_p = self.soup.find("p", class_="b-content__Nickname")
@@ -368,34 +375,74 @@ class FighterDetailsScraper(CustomModel):
 
         self.success = True
 
+    def db_update_fighter(self) -> None:
+        if not self.tried:
+            logger.info("Fighter was not updated since no attempt was made to scrape data")
+            return
+        self.success = cast(bool, self.success)
+        self.db.update_status("fighter", self.id, self.tried, self.success)
 
-# TODO: Change function signature
-def scrape_fighter(link: str, name: str) -> None:
-    print(f"Scraping page for {name}...", end=" ")
 
-    data_dict = {"link": link, "name": name}
+def scrape_fighter(fighter: DBFighter) -> Fighter:
+    console.rule(f"[subtitle]{fighter.name.upper()}", characters="=", style="subtitle")
+    console.print(f"Scraping page for [b]{fighter.name}[/b]...", justify="center", highlight=False)
+
+    try:
+        db = LinksDB()
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to create DB object")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+
+    data_dict = dict(db=db, **fighter._asdict())
     try:
         scraper = FighterDetailsScraper.model_validate(data_dict)
-    except ValidationError:
+    except ValidationError as exc:
         logger.exception("Failed to create scraper object")
-        print("Failed!")
-        return
+        logger.debug(f"Scraper args: {data_dict}")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
 
     try:
         scraper.scrape()
-        print("Done!")
-    except ScraperError:
+        console.print("Done!", style="success", justify="center")
+    except ScraperError as exc_1:
         logger.exception("Failed to scrape fighter details")
-        print("Failed!")
-        return
+        logger.debug(f"Fighter: {fighter}")
+        console.print("Failed!", style="danger", justify="center")
+        console.print("No data was scraped.", style="danger", justify="center")
 
-    print("Saving scraped data...", end=" ")
+        console.print("Updating fighter status...", justify="center", highlight=False)
+        try:
+            scraper.db_update_fighter()
+            console.print("Done!", style="success", justify="center")
+        except sqlite3.Error as exc_2:
+            logger.exception("Failed to update fighter status")
+            console.print("Failed!", style="danger", justify="center")
+            raise exc_2
+
+        raise exc_1
+
+    console.print("Saving scraped data...", justify="center", highlight=False)
     try:
         scraper.save_json()
-        print("Done!")
-    except OSError:
+        console.print("Done!", style="success", justify="center")
+    except OSError as exc:
         logger.exception("Failed to save data to JSON")
-        print("Failed!")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+    finally:
+        console.print("Updating fighter status...", justify="center", highlight=False)
+        try:
+            scraper.db_update_fighter()
+            console.print("Done!", style="success", justify="center")
+        except sqlite3.Error as exc:
+            logger.exception("Failed to update fighter status")
+            console.print("Failed!", style="danger", justify="center")
+            raise exc
+
+    scraper.scraped_data = cast(Fighter, scraper.scraped_data)
+    return scraper.scraped_data
 
 
 if __name__ == "__main__":
@@ -411,5 +458,5 @@ if __name__ == "__main__":
     # )
     # args = parser.parse_args()
 
-    # TODO: Remove. Just a simple test.
-    scrape_fighter("http://www.ufcstats.com/fighter-details/a1f6999fe57236e0", "Wanderlei Silva")
+    # scrape_fighter("http://www.ufcstats.com/fighter-details/a1f6999fe57236e0", "Wanderlei Silva")
+    pass
