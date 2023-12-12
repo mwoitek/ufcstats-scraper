@@ -136,8 +136,20 @@ class LinksDB:
             logger.debug(f"New fight: {params}")
         self.conn.commit()
 
-    def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
-        query = "SELECT id, link, name FROM event"
+    @staticmethod
+    def build_read_query(
+        table: TableName,
+        extra_cols: Union[str, list[str]],
+        select: LinkSelection = "untried",
+    ) -> str:
+        cols = ["id", "link"]
+        if isinstance(extra_cols, str):
+            cols.append(extra_cols)
+        else:
+            cols.extend(extra_cols)
+        cols_str = ", ".join(cols)
+
+        query = f"SELECT {cols_str} FROM {table}"
         match select:
             case "untried":
                 query = f"{query} WHERE tried = 0"
@@ -145,6 +157,12 @@ class LinksDB:
                 query = f"{query} WHERE success = 0"
             case "all":
                 pass
+
+        logger.debug(f"Built read query: {query}")
+        return query
+
+    def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
+        query = LinksDB.build_read_query(table="event", extra_cols="name", select=select)
         return [DBEvent(*row) for row in self.cur.execute(query)]
 
     def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
