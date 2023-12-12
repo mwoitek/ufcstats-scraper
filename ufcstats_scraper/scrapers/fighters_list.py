@@ -262,7 +262,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
         console.print("Failed!", style="danger", justify="center")
-        raise exc from None
+        raise exc
 
     scraper = FightersListScraper(letter=letter, db=db)
     try:
@@ -272,7 +272,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
         logger.exception(f"Failed to scrape data for {letter_upper}")
         console.print("Failed!", style="danger", justify="center")
         console.print("No data was scraped.", style="danger", justify="center")
-        raise exc from None
+        raise exc
 
     fighters = cast(list[Fighter], scraper.scraped_data)
     console.print(
@@ -289,7 +289,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
     except OSError as exc:
         logger.exception(f"Failed to save data to JSON for {letter_upper}")
         console.print("Failed!", style="danger", justify="center")
-        raise exc from None
+        raise exc
 
     console.print("Updating links DB...", justify="center", highlight=False)
     try:
@@ -298,7 +298,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
     except sqlite3.Error as exc:
         logger.exception("Failed to update links DB")
         console.print("Failed!", style="danger", justify="center")
-        raise exc from None
+        raise exc
 
     return fighters
 
@@ -355,7 +355,7 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
     except OSError as exc:
         logger.exception("Failed to save combined data to JSON")
         console.print("Failed!", style="danger", justify="center")
-        raise exc from None
+        raise exc
 
 
 if __name__ == "__main__":

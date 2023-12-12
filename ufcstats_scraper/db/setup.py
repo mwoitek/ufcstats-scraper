@@ -40,7 +40,7 @@ class DBCreator:
                 console.print("Done!", style="success", justify="center")
             except (FileNotFoundError, sqlite3.Error) as exc:
                 console.print("Failed!", style="danger", justify="center")
-                raise exc from None
+                raise exc
 
     def drop(self) -> None:
         console.rule("[subtitle]DROPPING TABLES", characters="=", style="subtitle")
@@ -51,7 +51,7 @@ class DBCreator:
                 console.print("Done!", style="success", justify="center")
             except (FileNotFoundError, sqlite3.Error) as exc:
                 console.print("Failed!", style="danger", justify="center")
-                raise exc from None
+                raise exc
 
 
 if __name__ == "__main__":
@@ -70,6 +70,5 @@ if __name__ == "__main__":
         creator.create()
     except (FileNotFoundError, sqlite3.Error):
         console.quiet = False
-        console.print("ERROR", style="danger", justify="center")
         console.print_exception()
         exit(1)
