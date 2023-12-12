@@ -3,6 +3,7 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Optional
 from typing import Self
 from typing import Union
 
@@ -142,6 +143,7 @@ class LinksDB:
         table: TableName,
         extra_cols: Union[str, list[str]],
         select: LinkSelection = "untried",
+        limit: Optional[int] = None,
     ) -> str:
         cols = ["id", "link"]
         if isinstance(extra_cols, str):
@@ -159,17 +161,24 @@ class LinksDB:
             case "all":
                 pass
 
+        if isinstance(limit, int):
+            query = f"{query} LIMIT {limit}"
+
         logger.debug(f"Built read query: {query}")
         return query
 
-    def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
-        query = LinksDB.build_read_query(table="event", extra_cols="name", select=select)
+    def read_events(self, select: LinkSelection = "untried", limit: Optional[int] = None) -> list[DBEvent]:
+        query = LinksDB.build_read_query(table="event", extra_cols="name", select=select, limit=limit)
         events = [DBEvent(*row) for row in self.cur.execute(query)]
         logger.info(f"Read {len(events)} events from DB")
         return events
 
-    def read_fighters(self, select: LinkSelection = "untried") -> list[DBFighter]:
-        query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select)
+    def read_fighters(
+        self,
+        select: LinkSelection = "untried",
+        limit: Optional[int] = None,
+    ) -> list[DBFighter]:
+        query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select, limit=limit)
         fighters = [DBFighter(*row) for row in self.cur.execute(query)]
         logger.info(f"Read {len(fighters)} fighters from DB")
         return fighters

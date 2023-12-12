@@ -266,6 +266,7 @@ def scrape_event(event: DBEvent) -> list[Fight]:
 @validate_call
 def scrape_event_details(
     select: LinkSelection,
+    limit: Optional[int] = None,
     delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
 ) -> None:
     console.rule("[title]EVENT DETAILS", characters="=", style="title")
@@ -276,7 +277,7 @@ def scrape_event_details(
     events: list[DBEvent] = []
     try:
         with LinksDB() as db:
-            events.extend(db.read_events(select))
+            events.extend(db.read_events(select, limit))
         console.print("Done!", style="success", justify="center")
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to read events from DB")
@@ -287,6 +288,7 @@ def scrape_event_details(
     if num_events == 0:
         console.print("No event to scrape.", style="info", justify="center")
         return
+    console.print(f"Got {num_events} event(s) to scrape.", style="success", justify="center", highlight=False)
 
     for i, event in enumerate(events, start=1):
         try:
@@ -323,12 +325,21 @@ if __name__ == "__main__":
         dest="select",
         help="filter events in the database",
     )
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=-1,
+        dest="limit",
+        help="limit the number of events to scrape",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
+    limit = args.limit if args.limit > 0 else None
     console.quiet = args.quiet
     try:
-        scrape_event_details(args.select, args.delay)
+        scrape_event_details(args.select, limit, args.delay)
     except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
