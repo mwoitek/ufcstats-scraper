@@ -1,11 +1,9 @@
 import sqlite3
 from argparse import ArgumentParser
-from contextlib import redirect_stdout
 from json import dump
 from os import mkdir
 from pathlib import Path
 from sys import exit
-from sys import stdout
 from time import sleep
 from typing import Annotated
 from typing import Any
@@ -270,30 +268,39 @@ def scrape_event_details(
     select: LinkSelection,
     delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
 ) -> None:
-    print("SCRAPING EVENT DETAILS", end="\n\n")
+    console.rule("[title]EVENT DETAILS", characters="=", style="title")
 
-    print("Retrieving event links...", end=" ")
+    console.rule("[subtitle]EVENT LINKS", characters="=", style="subtitle")
+    console.print("Retrieving event links...", justify="center", highlight=False)
+
     events: list[DBEvent] = []
     try:
         with LinksDB() as db:
             events.extend(db.read_events(select))
-        print("Done!")
-    except (DBNotSetupError, sqlite3.Error):
+        console.print("Done!", style="success", justify="center")
+    except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to read events from DB")
-        print("Failed!")
-        return
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
 
     num_events = len(events)
     if num_events == 0:
-        print("No event to scrape.")
+        console.print("No event to scrape.", style="info", justify="center")
         return
 
-    print()
-
     for i, event in enumerate(events, start=1):
-        scrape_event(event)
+        try:
+            scrape_event(event)
+        except ScraperError:
+            pass
+
         if i < num_events:
-            print(f"Continuing in {delay} second(s)...", end="\n\n")
+            console.print(
+                f"Continuing in {delay} second(s)...",
+                style="info",
+                justify="center",
+                highlight=False,
+            )
             sleep(delay)
 
 
@@ -319,11 +326,11 @@ if __name__ == "__main__":
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
     args = parser.parse_args()
 
+    console.quiet = args.quiet
     try:
-        with redirect_stdout(None if args.quiet else stdout):
-            scrape_event_details(args.select, args.delay)
-    except ValidationError as exc:
+        scrape_event_details(args.select, args.delay)
+    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
-        print("ERROR:")
-        print(exc)
+        console.quiet = False
+        console.print_exception()
         exit(1)
