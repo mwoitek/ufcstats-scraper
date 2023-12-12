@@ -15,6 +15,7 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.common import TableName
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
+from ufcstats_scraper.db.models import DBFighter
 
 if TYPE_CHECKING:
     from ufcstats_scraper.scrapers.event_details import Fight
@@ -163,7 +164,15 @@ class LinksDB:
 
     def read_events(self, select: LinkSelection = "untried") -> list[DBEvent]:
         query = LinksDB.build_read_query(table="event", extra_cols="name", select=select)
-        return [DBEvent(*row) for row in self.cur.execute(query)]
+        events = [DBEvent(*row) for row in self.cur.execute(query)]
+        logger.info(f"Read {len(events)} events from DB")
+        return events
+
+    def read_fighters(self, select: LinkSelection = "untried") -> list[DBFighter]:
+        query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select)
+        fighters = [DBFighter(*row) for row in self.cur.execute(query)]
+        logger.info(f"Read {len(fighters)} fighters from DB")
+        return fighters
 
     def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
         fighter_ids: dict["EventFighter", int] = {}
