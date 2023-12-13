@@ -50,6 +50,19 @@ class Box(CustomModel):
         time = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
         return time
 
+    @field_validator("time_format")
+    @classmethod
+    def transform_time_format(cls, time_format: str) -> str:
+        pattern = r"(\d{1}) Rnd \((\d{1}-)+(\d{1})\)"
+        match = re.match(pattern, time_format, flags=re.IGNORECASE)
+        match = cast(re.Match, match)
+
+        num_rounds = int(match.group(1))
+        minutes = int(match.group(3))
+
+        time_format = f"{num_rounds} {minutes}-minute rounds"
+        return time_format
+
     @model_validator(mode="after")
     def parse_description(self) -> Self:
         pattern = r"(UFC )?(Interim )?(Women's )?([A-Za-z ]+?)(Title )?Bout"
