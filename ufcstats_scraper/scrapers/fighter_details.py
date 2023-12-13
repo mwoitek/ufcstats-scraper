@@ -1,10 +1,13 @@
 import re
 import sqlite3
+from argparse import ArgumentParser
 from datetime import date
 from datetime import datetime
 from json import dump
 from os import mkdir
 from pathlib import Path
+from time import sleep
+from typing import Annotated
 from typing import Any
 from typing import ClassVar
 from typing import Optional
@@ -19,14 +22,17 @@ from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
+from pydantic import validate_call
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFighter
+from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
@@ -445,18 +451,90 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
     return scraper.scraped_data
 
 
-if __name__ == "__main__":
-    # from argparse import ArgumentParser
-    # parser = ArgumentParser(description="Script for scraping fighter details.")
-    # parser.add_argument(
-    #     "-d",
-    #     "--delay",
-    #     type=float,
-    #     default=1.0,
-    #     dest="delay",
-    #     help="set delay between requests",
-    # )
-    # args = parser.parse_args()
+@validate_call
+def scrape_fighter_details(
+    select: LinkSelection,
+    limit: Optional[int] = None,
+    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+) -> None:
+    console.rule("[title]FIGHTER DETAILS", characters="=", style="title")
 
-    # scrape_fighter("http://www.ufcstats.com/fighter-details/a1f6999fe57236e0", "Wanderlei Silva")
-    pass
+    console.rule("[subtitle]FIGHTER LINKS", characters="=", style="subtitle")
+    console.print("Retrieving fighter links...", justify="center", highlight=False)
+
+    fighters: list[DBFighter] = []
+    try:
+        with LinksDB() as db:
+            fighters.extend(db.read_fighters(select, limit))
+        console.print("Done!", style="success", justify="center")
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to read fighters from DB")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+
+    num_fighters = len(fighters)
+    if num_fighters == 0:
+        console.print("No fighter to scrape.", style="info", justify="center")
+        return
+    console.print(
+        f"Got {num_fighters} fighter(s) to scrape.",
+        style="success",
+        justify="center",
+        highlight=False,
+    )
+
+    for i, fighter in enumerate(fighters, start=1):
+        try:
+            scrape_fighter(fighter)
+        except ScraperError:
+            pass
+
+        if i < num_fighters:
+            console.print(
+                f"Continuing in {delay} second(s)...",
+                style="info",
+                justify="center",
+                highlight=False,
+            )
+            sleep(delay)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Script for scraping fighter details.")
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=float,
+        default=DEFAULT_DELAY,
+        dest="delay",
+        help="set delay between requests",
+    )
+    parser.add_argument(
+        "-f",
+        "--filter",
+        type=str,
+        choices=["all", "failed", "untried"],
+        default="untried",
+        dest="select",
+        help="filter fighters in the database",
+    )
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=-1,
+        dest="limit",
+        help="limit the number of fighters to scrape",
+    )
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
+    args = parser.parse_args()
+
+    limit = args.limit if args.limit > 0 else None
+    console.quiet = args.quiet
+    try:
+        scrape_fighter_details(args.select, limit, args.delay)
+    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
+        logger.exception("Failed to run main function")
+        console.quiet = False
+        console.print_exception()
+        exit(1)
