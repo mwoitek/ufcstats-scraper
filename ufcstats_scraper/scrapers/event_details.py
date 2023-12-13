@@ -292,10 +292,12 @@ def scrape_event_details(
 
     with progress:
         task = progress.add_task("Scraping events...", total=num_events)
+        ok_count = 0
 
         for i, event in enumerate(events, start=1):
             try:
                 scrape_event(event)
+                ok_count += 1
             except ScraperError:
                 pass
 
@@ -309,6 +311,16 @@ def scrape_event_details(
                     highlight=False,
                 )
                 sleep(delay)
+
+    console.rule("[subtitle]SUMMARY", style="subtitle")
+
+    if ok_count == 0:
+        logger.error("Failed to scrape data for all events")
+        console.print("No data was scraped.", style="danger", justify="center")
+        raise NoScrapedDataError("http://ufcstats.com/event-details/")
+
+    count_str = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
+    console.print(f"Successfully scraped data for {count_str}.", style="info", justify="center")
 
 
 if __name__ == "__main__":
@@ -345,7 +357,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_event_details(args.select, limit, args.delay)
-    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()

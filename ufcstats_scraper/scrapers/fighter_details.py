@@ -486,10 +486,12 @@ def scrape_fighter_details(
 
     with progress:
         task = progress.add_task("Scraping fighters...", total=num_fighters)
+        ok_count = 0
 
         for i, fighter in enumerate(fighters, start=1):
             try:
                 scrape_fighter(fighter)
+                ok_count += 1
             except ScraperError:
                 pass
 
@@ -503,6 +505,16 @@ def scrape_fighter_details(
                     highlight=False,
                 )
                 sleep(delay)
+
+    console.rule("[subtitle]SUMMARY", style="subtitle")
+
+    if ok_count == 0:
+        logger.error("Failed to scrape data for all fighters")
+        console.print("No data was scraped.", style="danger", justify="center")
+        raise NoScrapedDataError("http://ufcstats.com/fighter-details/")
+
+    count_str = "all fighters" if num_fighters == ok_count else f"{ok_count} out of {num_fighters} fighter(s)"
+    console.print(f"Successfully scraped data for {count_str}.", style="info", justify="center")
 
 
 if __name__ == "__main__":
@@ -539,7 +551,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighter_details(args.select, limit, args.delay)
-    except (DBNotSetupError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
