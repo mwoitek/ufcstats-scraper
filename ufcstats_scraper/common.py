@@ -6,6 +6,11 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 from rich.console import Console
+from rich.progress import BarColumn
+from rich.progress import MofNCompleteColumn
+from rich.progress import Progress
+from rich.progress import TaskProgressColumn
+from rich.progress import TextColumn
 from rich.theme import Theme
 
 LOG_DIR = Path(__file__).resolve().parents[1] / "log"
@@ -20,6 +25,14 @@ custom_theme = Theme(
     }
 )
 console = Console(theme=custom_theme)
+progress = Progress(
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(bar_width=None, complete_style="bright_green"),
+    MofNCompleteColumn(),
+    TaskProgressColumn(),
+    console=console,
+    transient=True,
+)
 
 
 class CustomLogger:

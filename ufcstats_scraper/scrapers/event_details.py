@@ -22,6 +22,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -185,7 +186,7 @@ class EventDetailsScraper(CustomModel):
 
 
 def scrape_event(event: DBEvent) -> list[Fight]:
-    console.rule(f"[subtitle]{event.name.upper()}", characters="=", style="subtitle")
+    console.rule(f"[subtitle]{event.name.upper()}", style="subtitle")
     console.print(f"Scraping page for [b]{event.name}[/b]...", justify="center", highlight=False)
 
     try:
@@ -268,9 +269,9 @@ def scrape_event_details(
     limit: Optional[int] = None,
     delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
 ) -> None:
-    console.rule("[title]EVENT DETAILS", characters="=", style="title")
+    console.rule("[title]EVENT DETAILS", style="title")
 
-    console.rule("[subtitle]EVENT LINKS", characters="=", style="subtitle")
+    console.rule("[subtitle]EVENT LINKS", style="subtitle")
     console.print("Retrieving event links...", justify="center", highlight=False)
 
     events: list[DBEvent] = []
@@ -289,20 +290,25 @@ def scrape_event_details(
         return
     console.print(f"Got {num_events} event(s) to scrape.", style="success", justify="center", highlight=False)
 
-    for i, event in enumerate(events, start=1):
-        try:
-            scrape_event(event)
-        except ScraperError:
-            pass
+    with progress:
+        task = progress.add_task("Scraping events...", total=num_events)
 
-        if i < num_events:
-            console.print(
-                f"Continuing in {delay} second(s)...",
-                style="info",
-                justify="center",
-                highlight=False,
-            )
-            sleep(delay)
+        for i, event in enumerate(events, start=1):
+            try:
+                scrape_event(event)
+            except ScraperError:
+                pass
+
+            progress.update(task, advance=1)
+
+            if i < num_events:
+                console.print(
+                    f"Continuing in {delay} second(s)...",
+                    style="info",
+                    justify="center",
+                    highlight=False,
+                )
+                sleep(delay)
 
 
 if __name__ == "__main__":

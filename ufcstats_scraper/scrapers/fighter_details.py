@@ -28,6 +28,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -390,7 +391,7 @@ class FighterDetailsScraper(CustomModel):
 
 
 def scrape_fighter(fighter: DBFighter) -> Fighter:
-    console.rule(f"[subtitle]{fighter.name.upper()}", characters="=", style="subtitle")
+    console.rule(f"[subtitle]{fighter.name.upper()}", style="subtitle")
     console.print(f"Scraping page for [b]{fighter.name}[/b]...", justify="center", highlight=False)
 
     try:
@@ -457,9 +458,9 @@ def scrape_fighter_details(
     limit: Optional[int] = None,
     delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
 ) -> None:
-    console.rule("[title]FIGHTER DETAILS", characters="=", style="title")
+    console.rule("[title]FIGHTER DETAILS", style="title")
 
-    console.rule("[subtitle]FIGHTER LINKS", characters="=", style="subtitle")
+    console.rule("[subtitle]FIGHTER LINKS", style="subtitle")
     console.print("Retrieving fighter links...", justify="center", highlight=False)
 
     fighters: list[DBFighter] = []
@@ -483,20 +484,25 @@ def scrape_fighter_details(
         highlight=False,
     )
 
-    for i, fighter in enumerate(fighters, start=1):
-        try:
-            scrape_fighter(fighter)
-        except ScraperError:
-            pass
+    with progress:
+        task = progress.add_task("Scraping fighters...", total=num_fighters)
 
-        if i < num_fighters:
-            console.print(
-                f"Continuing in {delay} second(s)...",
-                style="info",
-                justify="center",
-                highlight=False,
-            )
-            sleep(delay)
+        for i, fighter in enumerate(fighters, start=1):
+            try:
+                scrape_fighter(fighter)
+            except ScraperError:
+                pass
+
+            progress.update(task, advance=1)
+
+            if i < num_fighters:
+                console.print(
+                    f"Continuing in {delay} second(s)...",
+                    style="info",
+                    justify="center",
+                    highlight=False,
+                )
+                sleep(delay)
 
 
 if __name__ == "__main__":
