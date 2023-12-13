@@ -7175,6 +7175,19 @@
     "currentChampion": false
   },
   {
+    "firstName": "Katlyn",
+    "lastName": "Cerminara",
+    "nickname": "Blonde Fighter",
+    "height": 69,
+    "weight": 125,
+    "reach": 68,
+    "stance": "Orthodox",
+    "wins": 18,
+    "losses": 5,
+    "draws": 0,
+    "currentChampion": false
+  },
+  {
     "firstName": "Donald",
     "lastName": "Cerrone",
     "nickname": "Cowboy",
@@ -7558,19 +7571,6 @@
     "stance": "Orthodox",
     "wins": 22,
     "losses": 13,
-    "draws": 0,
-    "currentChampion": false
-  },
-  {
-    "firstName": "Katlyn",
-    "lastName": "Chookagian",
-    "nickname": "Blonde Fighter",
-    "height": 69,
-    "weight": 125,
-    "reach": 68,
-    "stance": "Orthodox",
-    "wins": 18,
-    "losses": 5,
     "draws": 0,
     "currentChampion": false
   },
@@ -10845,7 +10845,7 @@
     "firstName": "Rafael",
     "lastName": "Dos Anjos",
     "height": 68,
-    "weight": 170,
+    "weight": 155,
     "reach": 70,
     "stance": "Southpaw",
     "wins": 32,
@@ -31563,7 +31563,7 @@
   {
     "firstName": "Sean",
     "lastName": "O'Malley",
-    "nickname": "Sugar",
+    "nickname": "Suga",
     "height": 71,
     "weight": 135,
     "reach": 72,

@@ -28,6 +28,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
@@ -309,22 +310,27 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
 
-    for i, letter in enumerate(ascii_lowercase, start=1):
-        try:
-            fighters = scrape_letter(letter)
-            all_fighters.extend(fighters)
-            ok_letters.append(letter.upper())
-        except ScraperError:
-            pass
+    with progress:
+        task = progress.add_task("Scraping fighters...", total=26)
 
-        if i < 26:
-            console.print(
-                f"Continuing in {delay} second(s)...",
-                style="info",
-                justify="center",
-                highlight=False,
-            )
-            sleep(delay)
+        for i, letter in enumerate(ascii_lowercase, start=1):
+            try:
+                fighters = scrape_letter(letter)
+                all_fighters.extend(fighters)
+                ok_letters.append(letter.upper())
+            except ScraperError:
+                pass
+
+            progress.update(task, advance=1)
+
+            if i < 26:
+                console.print(
+                    f"Continuing in {delay} second(s)...",
+                    style="info",
+                    justify="center",
+                    highlight=False,
+                )
+                sleep(delay)
 
     console.rule("[subtitle]ALL LETTERS", style="subtitle")
 
