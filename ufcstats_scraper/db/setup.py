@@ -1,6 +1,5 @@
 import sqlite3
 from argparse import ArgumentParser
-from sys import exit
 
 from ufcstats_scraper.common import console
 from ufcstats_scraper.db.common import DB_PATH

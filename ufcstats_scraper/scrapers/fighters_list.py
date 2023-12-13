@@ -5,7 +5,6 @@ from json import dump
 from os import mkdir
 from pathlib import Path
 from string import ascii_lowercase
-from sys import exit
 from time import sleep
 from typing import Annotated
 from typing import Any

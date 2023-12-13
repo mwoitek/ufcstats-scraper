@@ -3,7 +3,6 @@ from argparse import ArgumentParser
 from json import dump
 from os import mkdir
 from pathlib import Path
-from sys import exit
 from time import sleep
 from typing import Annotated
 from typing import Any
