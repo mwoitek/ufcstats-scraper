@@ -174,7 +174,7 @@ class EventsListScraper:
 
 
 def scrape_events_list() -> None:
-    console.rule("[title]EVENTS LIST", characters="=", style="title")
+    console.rule("[title]EVENTS LIST", style="title")
     console.print("Scraping events list...", justify="center", highlight=False)
 
     try:

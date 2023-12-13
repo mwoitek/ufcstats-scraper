@@ -253,7 +253,7 @@ class FightersListScraper(CustomModel):
 @validate_call
 def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fighter]:
     letter_upper = letter.upper()
-    console.rule(f"[subtitle]{letter_upper}", characters="=", style="subtitle")
+    console.rule(f"[subtitle]{letter_upper}", style="subtitle")
     console.print(f"Scraping fighter data for letter {letter_upper}...", justify="center", highlight=False)
 
     try:
@@ -304,7 +304,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
 
 @validate_call
 def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
-    console.rule("[title]FIGHTERS LIST", characters="=", style="title")
+    console.rule("[title]FIGHTERS LIST", style="title")
 
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
@@ -326,7 +326,7 @@ def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY)
             )
             sleep(delay)
 
-    console.rule("[subtitle]ALL LETTERS", characters="=", style="subtitle")
+    console.rule("[subtitle]ALL LETTERS", style="subtitle")
 
     num_fighters = len(all_fighters)
     if num_fighters == 0:

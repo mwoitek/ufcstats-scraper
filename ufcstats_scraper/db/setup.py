@@ -31,7 +31,7 @@ class DBCreator:
         self.cur.executescript(sql_script)
 
     def create(self) -> None:
-        console.rule("[subtitle]CREATING TABLES", characters="=", style="subtitle")
+        console.rule("[subtitle]CREATING TABLES", style="subtitle")
         for table in TABLES:
             console.print(f"Creating [b]{table}[/b] table...", justify="center", highlight=False)
             try:
@@ -42,7 +42,7 @@ class DBCreator:
                 raise exc
 
     def drop(self) -> None:
-        console.rule("[subtitle]DROPPING TABLES", characters="=", style="subtitle")
+        console.rule("[subtitle]DROPPING TABLES", style="subtitle")
         for table in TABLES:
             console.print(f"Dropping [b]{table}[/b] table...", justify="center", highlight=False)
             try:
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     console.quiet = args.quiet
-    console.rule("[title]LINKS DB SETUP", characters="=", style="title")
+    console.rule("[title]LINKS DB SETUP", style="title")
 
     try:
         creator = DBCreator()
