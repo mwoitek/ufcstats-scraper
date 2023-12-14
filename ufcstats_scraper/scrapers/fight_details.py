@@ -1,17 +1,28 @@
 import re
 from datetime import timedelta
+from pathlib import Path
+from typing import Any
+from typing import ClassVar
 from typing import Optional
 from typing import Self
 from typing import cast
 
+import requests
+from bs4 import BeautifulSoup
+from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
+from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import console
 from ufcstats_scraper.scrapers.common import CleanName
+from ufcstats_scraper.scrapers.common import FightLink
+from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
 # NOTE: This model needs a few improvements. But it's good enough for me to
@@ -76,3 +87,73 @@ class Box(CustomModel):
         self.title_bout = match.group(5) is not None
 
         return self
+
+
+class FightDetailsScraper(CustomModel):
+    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fight_details"
+
+    link: FightLink
+
+    soup: Optional[BeautifulSoup] = None
+
+    def get_soup(self) -> BeautifulSoup:
+        try:
+            response = requests.get(str(self.link))
+        except RequestException as exc:
+            raise NoSoupError(self.link) from exc
+
+        if response.status_code != requests.codes["ok"]:
+            raise NoSoupError(self.link)
+
+        html = response.text
+        self.soup = BeautifulSoup(html, "lxml")
+        return self.soup
+
+    def scrape_box(self) -> Box:
+        if self.soup is None:
+            raise NoSoupError
+
+        box = self.soup.find("div", class_="b-fight-details__fight")
+        if not isinstance(box, Tag):
+            raise MissingHTMLElementError("Box (div.b-fight-details__fight)")
+
+        # Scrape description
+        description = box.find("i", class_="b-fight-details__fight-title")
+        if not isinstance(description, Tag):
+            raise MissingHTMLElementError("Description tag (i.b-fight-details__fight-title)")
+        data_dict: dict[str, Any] = {"description": description.get_text()}
+
+        ps = [p for p in box.find_all("p", class_="b-fight-details__text") if isinstance(p, Tag)]
+        if len(ps) != 2:
+            raise MissingHTMLElementError("Paragraphs (p.b-fight-details__text)")
+
+        # Scrape first line
+        class_re = re.compile("b-fight-details__text-item(_first)?")
+        is_ = [i for i in ps[0].find_all("i", class_=class_re) if isinstance(i, Tag)]
+        if len(is_) != 5:
+            raise MissingHTMLElementError(
+                "Idiomatic tags (i.b-fight-details__text-item_first, i.b-fight-details__text-item)"
+            )
+
+        for i in is_:
+            text = re.sub(r"\s{2,}", " ", i.get_text().strip())
+            field_name, field_value = text.split(": ")
+            data_dict[field_name.lower()] = field_value
+        data_dict["time_str"] = data_dict.pop("time")
+        data_dict["time_format"] = data_dict.pop("time format")
+
+        # Scrape second line
+        text = re.sub(r"\s{2,}", " ", ps[1].get_text().strip())
+        field_name, field_value = text.split(": ")
+        data_dict[field_name.lower()] = field_value
+
+        return Box.model_validate(data_dict)
+
+
+if __name__ == "__main__":
+    # TODO: Remove. Just a quick test.
+    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/b1f2ec122beda7a5"}
+    scraper = FightDetailsScraper.model_validate(data_dict)
+    scraper.get_soup()
+    box = scraper.scrape_box()
+    console.print(box.model_dump(by_alias=True))
