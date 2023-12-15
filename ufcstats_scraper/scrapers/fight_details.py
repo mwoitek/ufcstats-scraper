@@ -25,6 +25,24 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 
+class Scorecard(CustomModel):
+    score_str: str = Field(..., exclude=True, pattern=r"\D+\d+ - \d+\. ?")
+    judge: Optional[CleanName] = None
+    score_1: Optional[int] = Field(default=None, gt=0)
+    score_2: Optional[int] = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def parse_score_str(self) -> Self:
+        match = re.match(r"(\D+)(\d+) - (\d+)\. ?", self.score_str)
+        match = cast(re.Match, match)
+
+        self.judge = cast(str, match.group(1)).strip()
+        self.score_1 = int(match.group(2))
+        self.score_2 = int(match.group(3))
+
+        return self
+
+
 # NOTE: This model needs a few improvements. But it's good enough for me to
 # get started.
 class Box(CustomModel):
@@ -42,7 +60,9 @@ class Box(CustomModel):
     time: Optional[timedelta] = Field(default=None, validate_default=True)
     time_format: str = Field(..., pattern=r"\d{1} Rnd \((\d{1}-)+\d{1}\)")
     referee: CleanName
-    details: str
+    details_str: str = Field(..., exclude=True)
+    details: Optional[str] = None
+    scorecards: Optional[list[Scorecard]] = None
 
     @field_serializer("time", when_used="unless-none")
     def serialize_time(self, time: timedelta) -> int:
@@ -85,6 +105,18 @@ class Box(CustomModel):
 
         self.weight_class = cast(str, match.group(4)).strip().title()
         self.title_bout = match.group(5) is not None
+
+        return self
+
+    @model_validator(mode="after")
+    def parse_details_str(self) -> Self:
+        matches = re.findall(r"\D+\d+ - \d+\. ?", self.details_str)
+        matches = cast(list[str], matches)
+
+        if len(matches) == 0:
+            self.details = self.details_str.capitalize()
+        else:
+            self.scorecards = [Scorecard(score_str=match) for match in matches]
 
         return self
 
@@ -146,14 +178,15 @@ class FightDetailsScraper(CustomModel):
         text = re.sub(r"\s{2,}", " ", ps[1].get_text().strip())
         field_name, field_value = text.split(": ")
         data_dict[field_name.lower()] = field_value
+        data_dict["details_str"] = data_dict.pop("details")
 
         return Box.model_validate(data_dict)
 
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
-    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/b1f2ec122beda7a5"}
+    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/800a35b3a7e52308"}
     scraper = FightDetailsScraper.model_validate(data_dict)
     scraper.get_soup()
     box = scraper.scrape_box()
-    console.print(box.model_dump(by_alias=True))
+    console.print(box.model_dump(by_alias=True, exclude_none=True))
