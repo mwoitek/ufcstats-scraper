@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from typing import ClassVar
+from typing import Literal
 from typing import Optional
 from typing import Self
 from typing import cast
@@ -23,6 +24,32 @@ from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+
+ResultType = Literal["Win", "Loss", "Draw", "No contest"]
+
+
+class Result(CustomModel):
+    fighter_1_str: str = Field(..., exclude=True, max_length=2)
+    fighter_1: Optional[ResultType] = Field(default=None, validate_default=True)
+    fighter_2_str: str = Field(..., exclude=True, max_length=2)
+    fighter_2: Optional[ResultType] = Field(default=None, validate_default=True)
+
+    @field_validator("fighter_1", "fighter_2")
+    @classmethod
+    def fill_result(cls, result: Optional[ResultType], info: ValidationInfo) -> Optional[ResultType]:
+        if result is not None:
+            return result
+        match info.data.get(f"{info.field_name}_str"):
+            case "W":
+                return "Win"
+            case "L":
+                return "Loss"
+            case "D":
+                return "Draw"
+            case "NC":
+                return "No contest"
+            case _:
+                raise ValueError("invalid result")
 
 
 class Scorecard(CustomModel):
@@ -141,6 +168,25 @@ class FightDetailsScraper(CustomModel):
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
+    def scrape_result(self) -> Result:
+        if self.soup is None:
+            raise NoSoupError
+
+        fighters_div = self.soup.find("div", class_="b-fight-details__persons")
+        if not isinstance(fighters_div, Tag):
+            raise MissingHTMLElementError("Fighters div (div.b-fight-details__persons)")
+
+        is_ = [
+            i
+            for i in fighters_div.find_all("i", class_="b-fight-details__person-status")
+            if isinstance(i, Tag)
+        ]
+        if len(is_) != 2:
+            raise MissingHTMLElementError("Idiomatic tags (i.b-fight-details__person-status)")
+
+        data_dict = {f"fighter_{c}_str": i.get_text() for c, i in enumerate(is_, start=1)}
+        return Result.model_validate(data_dict)
+
     def scrape_box(self) -> Box:
         if self.soup is None:
             raise NoSoupError
@@ -188,5 +234,9 @@ if __name__ == "__main__":
     data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/800a35b3a7e52308"}
     scraper = FightDetailsScraper.model_validate(data_dict)
     scraper.get_soup()
+
+    result = scraper.scrape_result()
+    console.print(result.model_dump(by_alias=True, exclude_none=True))
+
     box = scraper.scrape_box()
     console.print(box.model_dump(by_alias=True, exclude_none=True))
