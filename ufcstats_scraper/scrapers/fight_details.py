@@ -147,6 +147,14 @@ class Box(CustomModel):
 
         return self
 
+    @model_validator(mode="after")
+    def check_consistency(self) -> Self:
+        if self.method.startswith("Decision"):
+            assert self.scorecards is not None, "fields 'method' and 'scorecards' are inconsistent"
+        else:
+            assert self.details is not None, "fields 'method' and 'details' are inconsistent"
+        return self
+
 
 class FightDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fight_details"
