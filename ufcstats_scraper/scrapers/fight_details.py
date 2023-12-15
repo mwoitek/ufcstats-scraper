@@ -27,6 +27,15 @@ from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 ResultType = Literal["Win", "Loss", "Draw", "No contest"]
 
+VALID_METHODS = {
+    "Could Not Continue",
+    "Decision - Majority",
+    "Decision - Split",
+    "Decision - Unanimous",
+    "KO/TKO",
+    "Submission",
+}
+
 
 class Result(CustomModel):
     fighter_1_str: str = Field(..., exclude=True, max_length=2)
@@ -94,6 +103,13 @@ class Box(CustomModel):
     @field_serializer("time", when_used="unless-none")
     def serialize_time(self, time: timedelta) -> int:
         return int(time.total_seconds())
+
+    @field_validator("method")
+    @classmethod
+    def check_method(cls, method: str) -> str:
+        if method not in VALID_METHODS:
+            raise ValueError(f"invalid method: {method}")
+        return method
 
     @field_validator("time")
     @classmethod
