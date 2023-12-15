@@ -55,8 +55,8 @@ class Result(CustomModel):
 class Scorecard(CustomModel):
     score_str: str = Field(..., exclude=True, pattern=r"\D+\d+ - \d+\. ?")
     judge: Optional[CleanName] = None
-    score_1: Optional[int] = Field(default=None, gt=0)
-    score_2: Optional[int] = Field(default=None, gt=0)
+    fighter_1: Optional[int] = Field(default=None, gt=0)
+    fighter_2: Optional[int] = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def parse_score_str(self) -> Self:
@@ -64,8 +64,8 @@ class Scorecard(CustomModel):
         match = cast(re.Match, match)
 
         self.judge = cast(str, match.group(1)).strip()
-        self.score_1 = int(match.group(2))
-        self.score_2 = int(match.group(3))
+        self.fighter_1 = int(match.group(2))
+        self.fighter_2 = int(match.group(3))
 
         return self
 
