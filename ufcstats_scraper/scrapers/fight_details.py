@@ -25,6 +25,12 @@ from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
+BonusType = Literal[
+    "Fight of the Night",
+    "Performance of the Night",
+    "Submission of the Night",
+    "KO of the Night",
+]
 ResultType = Literal["Win", "Loss", "Draw", "No contest"]
 
 VALID_METHODS = {
@@ -87,6 +93,8 @@ class Box(CustomModel):
         exclude=True,
         pattern=r"(UFC )?(Interim )?(Women's )?[A-Za-z ]+?(Title )?Bout",
     )
+    bonus_str: Optional[str] = Field(default=None, exclude=True)
+    bonus: Optional[BonusType] = Field(default=None, validate_default=True)
     sex: str = "Male"
     weight_class: Optional[str] = None
     title_bout: bool = False
@@ -103,6 +111,28 @@ class Box(CustomModel):
     @field_serializer("time", when_used="unless-none")
     def serialize_time(self, time: timedelta) -> int:
         return int(time.total_seconds())
+
+    @field_validator("bonus")
+    @classmethod
+    def fill_bonus(cls, bonus: Optional[BonusType], info: ValidationInfo) -> Optional[BonusType]:
+        if bonus is not None:
+            return bonus
+
+        bonus_str = info.data.get("bonus_str")
+        if not isinstance(bonus_str, str):
+            return
+
+        match bonus_str:
+            case "fight":
+                return "Fight of the Night"
+            case "perf":
+                return "Performance of the Night"
+            case "sub":
+                return "Submission of the Night"
+            case "ko":
+                return "KO of the Night"
+            case _:
+                raise ValueError("invalid bonus")
 
     @field_validator("method")
     @classmethod
@@ -225,6 +255,22 @@ class FightDetailsScraper(CustomModel):
             raise MissingHTMLElementError("Description tag (i.b-fight-details__fight-title)")
         data_dict: dict[str, Any] = {"description": description.get_text()}
 
+        # Scrape bonus
+        imgs = [img for img in description.find_all("img") if isinstance(img, Tag)]
+        # TODO: Remove
+        assert len(imgs) <= 2
+
+        for img in imgs:
+            src = cast(str, img.get("src"))
+            if src.endswith("belt.png"):
+                continue
+
+            match = re.search(r"[^/]+/([a-z]+)\.png", src)
+            match = cast(re.Match, match)
+
+            data_dict["bonus_str"] = cast(str, match.group(1))
+            break
+
         ps = [p for p in box.find_all("p", class_="b-fight-details__text") if isinstance(p, Tag)]
         if len(ps) != 2:
             raise MissingHTMLElementError("Paragraphs (p.b-fight-details__text)")
@@ -255,7 +301,7 @@ class FightDetailsScraper(CustomModel):
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
-    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/800a35b3a7e52308"}
+    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/b1f2ec122beda7a5"}
     scraper = FightDetailsScraper.model_validate(data_dict)
     scraper.get_soup()
 
