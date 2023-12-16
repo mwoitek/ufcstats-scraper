@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
+from pydantic import NonNegativeInt
 from pydantic import PositiveInt
 from pydantic import ValidationInfo
 from pydantic import field_serializer
@@ -195,6 +196,51 @@ class Box(CustomModel):
             assert self.details is not None, "fields 'method' and 'details' are inconsistent"
             assert self.scorecards is None, "fields 'method' and 'scorecards' are inconsistent"
         return self
+
+
+class Count(CustomModel):
+    count_str: str = Field(..., exclude=True, pattern=r"\d+ of \d+")
+    landed: Optional[NonNegativeInt] = None
+    attempted: Optional[NonNegativeInt] = None
+
+    @model_validator(mode="after")
+    def parse_count_str(self) -> Self:
+        match = re.match(r"(\d+) of (\d+)", self.count_str)
+        match = cast(re.Match, match)
+
+        landed = int(match.group(1))
+        attempted = int(match.group(2))
+        assert landed <= attempted, "'landed' cannot be greater than 'attempted'"
+
+        self.landed = landed
+        self.attempted = attempted
+
+        return self
+
+
+class FighterSignificantStrikes(CustomModel):
+    total: Count
+    percentage_str: str = Field(..., exclude=True, pattern=r"\d+%")
+    percentage: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    head: Count
+    body: Count
+    leg: Count
+    distance: Count
+    clinch: Count
+    ground: Count
+
+    @field_validator("percentage")
+    @classmethod
+    def fill_percentage(cls, percentage: Optional[float], info: ValidationInfo) -> Optional[float]:
+        if isinstance(percentage, float):
+            return percentage
+
+        percentage_str = cast(str, info.data.get("percentage_str"))
+        match = re.match(r"(\d+)%", percentage_str)
+        match = cast(re.Match, match)
+
+        percentage = int(match.group(1)) / 100
+        return percentage
 
 
 class FightDetailsScraper(CustomModel):
