@@ -10,8 +10,10 @@ from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
+from pydantic import PositiveInt
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
@@ -31,16 +33,15 @@ BonusType = Literal[
     "Submission of the Night",
     "KO of the Night",
 ]
-ResultType = Literal["Win", "Loss", "Draw", "No contest"]
-
-VALID_METHODS = {
+MethodType = Literal[
     "Could Not Continue",
     "Decision - Majority",
     "Decision - Split",
     "Decision - Unanimous",
     "KO/TKO",
     "Submission",
-}
+]
+ResultType = Literal["Win", "Loss", "Draw", "No contest"]
 
 
 class Result(CustomModel):
@@ -70,8 +71,8 @@ class Result(CustomModel):
 class Scorecard(CustomModel):
     score_str: str = Field(..., exclude=True, pattern=r"\D+\d+ - \d+\. ?")
     judge: Optional[CleanName] = None
-    fighter_1: Optional[int] = Field(default=None, gt=0)
-    fighter_2: Optional[int] = Field(default=None, gt=0)
+    fighter_1: Optional[PositiveInt] = None
+    fighter_2: Optional[PositiveInt] = None
 
     @model_validator(mode="after")
     def parse_score_str(self) -> Self:
@@ -85,8 +86,7 @@ class Scorecard(CustomModel):
         return self
 
 
-# NOTE: This model needs a few improvements. But it's good enough for me to
-# get started.
+# TODO: Choose better name
 class Box(CustomModel):
     description: str = Field(
         ...,
@@ -98,7 +98,7 @@ class Box(CustomModel):
     sex: str = "Male"
     weight_class: Optional[str] = None
     title_bout: bool = False
-    method: str
+    method: MethodType
     round: int = Field(..., ge=1, le=5)
     time_str: str = Field(..., exclude=True, pattern=r"\d{1}:\d{2}")
     time: Optional[timedelta] = Field(default=None, validate_default=True)
@@ -133,13 +133,6 @@ class Box(CustomModel):
                 return "KO of the Night"
             case _:
                 raise ValueError("invalid bonus")
-
-    @field_validator("method")
-    @classmethod
-    def check_method(cls, method: str) -> str:
-        if method not in VALID_METHODS:
-            raise ValueError(f"invalid method: {method}")
-        return method
 
     @field_validator("time")
     @classmethod
@@ -196,9 +189,11 @@ class Box(CustomModel):
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
         if self.method.startswith("Decision"):
+            assert self.details is None, "fields 'method' and 'details' are inconsistent"
             assert self.scorecards is not None, "fields 'method' and 'scorecards' are inconsistent"
         else:
             assert self.details is not None, "fields 'method' and 'details' are inconsistent"
+            assert self.scorecards is None, "fields 'method' and 'scorecards' are inconsistent"
         return self
 
 
@@ -226,20 +221,18 @@ class FightDetailsScraper(CustomModel):
         if self.soup is None:
             raise NoSoupError
 
-        fighters_div = self.soup.find("div", class_="b-fight-details__persons")
-        if not isinstance(fighters_div, Tag):
+        div = self.soup.find("div", class_="b-fight-details__persons")
+        if not isinstance(div, Tag):
             raise MissingHTMLElementError("Fighters div (div.b-fight-details__persons)")
 
-        is_ = [
-            i
-            for i in fighters_div.find_all("i", class_="b-fight-details__person-status")
-            if isinstance(i, Tag)
-        ]
+        is_: ResultSet[Tag] = div.find_all("i", class_="b-fight-details__person-status")
         if len(is_) != 2:
             raise MissingHTMLElementError("Idiomatic tags (i.b-fight-details__person-status)")
 
-        data_dict = {f"fighter_{c}_str": i.get_text() for c, i in enumerate(is_, start=1)}
-        return Result.model_validate(data_dict)
+        return Result(
+            fighter_1_str=is_[0].get_text(),
+            fighter_2_str=is_[1].get_text(),
+        )
 
     def scrape_box(self) -> Box:
         if self.soup is None:
@@ -256,9 +249,8 @@ class FightDetailsScraper(CustomModel):
         data_dict: dict[str, Any] = {"description": description.get_text()}
 
         # Scrape bonus
-        imgs = [img for img in description.find_all("img") if isinstance(img, Tag)]
-        # TODO: Remove
-        assert len(imgs) <= 2
+        imgs: ResultSet[Tag] = description.find_all("img")
+        assert len(imgs) <= 2  # TODO: Remove
 
         for img in imgs:
             src = cast(str, img.get("src"))
@@ -271,13 +263,13 @@ class FightDetailsScraper(CustomModel):
             data_dict["bonus_str"] = cast(str, match.group(1))
             break
 
-        ps = [p for p in box.find_all("p", class_="b-fight-details__text") if isinstance(p, Tag)]
+        ps: ResultSet[Tag] = box.find_all("p", class_="b-fight-details__text")
         if len(ps) != 2:
             raise MissingHTMLElementError("Paragraphs (p.b-fight-details__text)")
 
         # Scrape first line
         class_re = re.compile("b-fight-details__text-item(_first)?")
-        is_ = [i for i in ps[0].find_all("i", class_=class_re) if isinstance(i, Tag)]
+        is_: ResultSet[Tag] = ps[0].find_all("i", class_=class_re)
         if len(is_) != 5:
             raise MissingHTMLElementError(
                 "Idiomatic tags (i.b-fight-details__text-item_first, i.b-fight-details__text-item)"
@@ -287,6 +279,7 @@ class FightDetailsScraper(CustomModel):
             text = re.sub(r"\s{2,}", " ", i.get_text().strip())
             field_name, field_value = text.split(": ")
             data_dict[field_name.lower()] = field_value
+
         data_dict["time_str"] = data_dict.pop("time")
         data_dict["time_format"] = data_dict.pop("time format")
 
@@ -301,7 +294,7 @@ class FightDetailsScraper(CustomModel):
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
-    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/b1f2ec122beda7a5"}
+    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/226884e46a10865d"}
     scraper = FightDetailsScraper.model_validate(data_dict)
     scraper.get_soup()
 
