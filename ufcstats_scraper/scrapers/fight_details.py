@@ -45,6 +45,17 @@ MethodType = Literal[
     "Submission",
 ]
 ResultType = Literal["Win", "Loss", "Draw", "No contest"]
+WeightClassType = Literal[
+    "Strawweight",
+    "Flyweight",
+    "Bantamweight",
+    "Featherweight",
+    "Lightweight",
+    "Welterweight",
+    "Middleweight",
+    "Light Heavyweight",
+    "Heavyweight",
+]
 
 
 class Result(CustomModel):
@@ -99,7 +110,7 @@ class Box(CustomModel):
     bonus_str: Optional[str] = Field(default=None, exclude=True)
     bonus: Optional[BonusType] = Field(default=None, validate_default=True)
     sex: str = "Male"
-    weight_class: Optional[str] = None
+    weight_class: Optional[WeightClassType] = None
     title_bout: bool = False
     method: MethodType
     round: int = Field(..., ge=1, le=5)
@@ -172,7 +183,7 @@ class Box(CustomModel):
         if match.group(3) is not None:
             self.sex = "Female"
 
-        self.weight_class = cast(str, match.group(4)).strip().title()
+        self.weight_class = cast(str, match.group(4)).strip().title()  # pyright: ignore
         self.title_bout = match.group(5) is not None
 
         return self
