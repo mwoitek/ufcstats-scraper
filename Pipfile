@@ -9,6 +9,7 @@ requests = "*"
 lxml = "*"
 pydantic = "*"
 rich = "*"
+more-itertools = "*"
 
 [dev-packages]
 

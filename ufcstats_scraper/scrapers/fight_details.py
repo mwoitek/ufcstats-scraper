@@ -1,5 +1,6 @@
 import re
 from datetime import timedelta
+from itertools import chain
 from pathlib import Path
 from typing import Any
 from typing import ClassVar
@@ -12,6 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4 import ResultSet
 from bs4 import Tag
+from more_itertools import chunked
 from pydantic import Field
 from pydantic import NonNegativeInt
 from pydantic import PositiveInt
@@ -221,7 +223,7 @@ class Count(CustomModel):
 class FighterSignificantStrikes(CustomModel):
     total: Count
     percentage_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    percentage: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    percentage: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
     head: Count
     body: Count
     leg: Count
@@ -241,6 +243,16 @@ class FighterSignificantStrikes(CustomModel):
 
         percentage = int(match.group(1)) / 100
         return percentage
+
+
+class FightersSignificantStrikes(CustomModel):
+    fighter_1: FighterSignificantStrikes
+    fighter_2: FighterSignificantStrikes
+
+
+class SignificantStrikes(CustomModel):
+    total: FightersSignificantStrikes
+    per_round: list[FightersSignificantStrikes]
 
 
 class FightDetailsScraper(CustomModel):
@@ -337,6 +349,62 @@ class FightDetailsScraper(CustomModel):
 
         return Box.model_validate(data_dict)
 
+    def scrape_significant_strikes(self) -> SignificantStrikes:
+        if self.soup is None:
+            raise NoSoupError
+
+        table_bodies: ResultSet[Tag] = self.soup.find_all("tbody")
+        if len(table_bodies) != 4:
+            raise MissingHTMLElementError("Table bodies (tbody)")
+
+        cells_1: ResultSet[Tag] = table_bodies[2].find_all("td")
+        cells_2: ResultSet[Tag] = table_bodies[3].find_all("td")
+
+        batches: list[list[str]] = []
+        for batch in chunked(chain(cells_1, cells_2), n=9):
+            batch = batch[1:]
+            batch[0], batch[1] = batch[1], batch[0]
+            processed = [re.sub(r"\s{2,}", " ", td.get_text().strip()) for td in batch]
+            batches.append(processed)
+
+        # Scrape totals
+        percentage_str_1, percentage_str_2 = batches[0][0].split(" ")
+        data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1}
+        data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2}
+
+        FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
+        for field, raw_value in zip(FIELDS, batches[0][1:]):
+            matches = cast(list[str], re.findall(r"\d+ of \d+", raw_value))
+            data_dict_1[field] = Count(count_str=matches[0])
+            data_dict_2[field] = Count(count_str=matches[1])
+
+        total = FightersSignificantStrikes(
+            fighter_1=FighterSignificantStrikes.model_validate(data_dict_1),
+            fighter_2=FighterSignificantStrikes.model_validate(data_dict_2),
+        )
+
+        # Scrape "per round" data
+        per_round: list[FightersSignificantStrikes] = []
+
+        for processed in batches[1:]:
+            percentage_str_1, percentage_str_2 = processed[0].split(" ")
+            data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1}
+            data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2}
+
+            for field, raw_value in zip(FIELDS, processed[1:]):
+                matches = cast(list[str], re.findall(r"\d+ of \d+", raw_value))
+                data_dict_1[field] = Count(count_str=matches[0])
+                data_dict_2[field] = Count(count_str=matches[1])
+
+            per_round.append(
+                FightersSignificantStrikes(
+                    fighter_1=FighterSignificantStrikes.model_validate(data_dict_1),
+                    fighter_2=FighterSignificantStrikes.model_validate(data_dict_2),
+                )
+            )
+
+        return SignificantStrikes(total=total, per_round=per_round)
+
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
@@ -349,3 +417,6 @@ if __name__ == "__main__":
 
     box = scraper.scrape_box()
     console.print(box.model_dump(by_alias=True, exclude_none=True))
+
+    significant_strikes = scraper.scrape_significant_strikes()
+    console.print(significant_strikes.model_dump(by_alias=True, exclude_none=True))
