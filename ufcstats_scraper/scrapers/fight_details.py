@@ -1,4 +1,5 @@
 import re
+import sqlite3
 from datetime import timedelta
 from itertools import chain
 from json import dump
@@ -30,12 +31,15 @@ from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
 from ufcstats_scraper.db.db import LinksDB
+from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.models import DBFight
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
+from ufcstats_scraper.scrapers.exceptions import ScraperError
 
 BonusType = Literal[
     "Fight of the Night",
@@ -519,6 +523,69 @@ class FightDetailsScraper(CustomModel):
             return
         self.success = cast(bool, self.success)
         self.db.update_status("fight", self.id, self.tried, self.success)
+
+
+def scrape_fight(fight: DBFight) -> Fight:
+    label = f"{fight.fighter_1_name} vs {fight.fighter_2_name} ({fight.event_name})"
+    console.rule(f"[subtitle]{label.upper()}", style="subtitle")
+    console.print(f"Scraping page for [b]{label}[/b]...", justify="center", highlight=False)
+
+    try:
+        db = LinksDB()
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to create DB object")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+
+    data_dict = dict(db=db, **fight._asdict())
+    try:
+        scraper = FightDetailsScraper.model_validate(data_dict)
+    except ValidationError as exc:
+        logger.exception("Failed to create scraper object")
+        logger.debug(f"Scraper args: {data_dict}")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+
+    try:
+        scraper.scrape()
+        console.print("Done!", style="success", justify="center")
+    except ScraperError as exc_1:
+        logger.exception("Failed to scrape fight details")
+        logger.debug(f"Fight: {fight}")
+        console.print("Failed!", style="danger", justify="center")
+        console.print("No data was scraped.", style="danger", justify="center")
+
+        console.print("Updating fight status...", justify="center", highlight=False)
+        try:
+            scraper.db_update_fight()
+            console.print("Done!", style="success", justify="center")
+        except sqlite3.Error as exc_2:
+            logger.exception("Failed to update fight status")
+            console.print("Failed!", style="danger", justify="center")
+            raise exc_2
+
+        raise exc_1
+
+    console.print("Saving scraped data...", justify="center", highlight=False)
+    try:
+        scraper.save_json()
+        console.print("Done!", style="success", justify="center")
+    except OSError as exc:
+        logger.exception("Failed to save data to JSON")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+    finally:
+        console.print("Updating fight status...", justify="center", highlight=False)
+        try:
+            scraper.db_update_fight()
+            console.print("Done!", style="success", justify="center")
+        except sqlite3.Error as exc:
+            logger.exception("Failed to update fight status")
+            console.print("Failed!", style="danger", justify="center")
+            raise exc
+
+    scraper.scraped_data = cast(Fight, scraper.scraped_data)
+    return scraper.scraped_data
 
 
 if __name__ == "__main__":
