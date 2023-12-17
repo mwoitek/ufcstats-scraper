@@ -1,6 +1,8 @@
 import re
 from datetime import timedelta
 from itertools import chain
+from json import dump
+from os import mkdir
 from pathlib import Path
 from typing import Any
 from typing import ClassVar
@@ -459,6 +461,23 @@ class FightDetailsScraper(CustomModel):
 
         return self.scraped_data
 
+    def save_json(self) -> None:
+        if self.scraped_data is None:
+            raise NoScrapedDataError
+
+        try:
+            mkdir(FightDetailsScraper.DATA_DIR, mode=0o755)
+        except FileExistsError:
+            pass
+
+        out_data = self.scraped_data.to_dict()
+        file_name = str(self.link).split("/")[-1]
+        out_file = FightDetailsScraper.DATA_DIR / f"{file_name}.json"
+        with open(out_file, mode="w") as json_file:
+            dump(out_data, json_file, indent=2)
+
+        self.success = True
+
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
@@ -466,3 +485,4 @@ if __name__ == "__main__":
     scraper = FightDetailsScraper.model_validate(data_dict)
     fight = scraper.scrape()
     console.print(fight.to_dict())
+    scraper.save_json()

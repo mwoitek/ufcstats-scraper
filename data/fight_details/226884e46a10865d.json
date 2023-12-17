@@ -1,0 +1,291 @@
+{
+  "result": {
+    "fighter1": "Win",
+    "fighter2": "Loss"
+  },
+  "sex": "Male",
+  "weightClass": "Middleweight",
+  "titleBout": false,
+  "method": "Decision - Unanimous",
+  "round": 3,
+  "time": 300,
+  "timeFormat": "3 5-minute rounds",
+  "referee": "Mark Smith",
+  "scorecards": [
+    {
+      "judge": "Derek Cleary",
+      "fighter1": 27,
+      "fighter2": 30
+    },
+    {
+      "judge": "Rick Winter",
+      "fighter1": 27,
+      "fighter2": 30
+    },
+    {
+      "judge": "Junichiro Kamijo",
+      "fighter1": 27,
+      "fighter2": 30
+    }
+  ],
+  "significantStrikes": {
+    "total": {
+      "fighter1": {
+        "total": {
+          "landed": 108,
+          "attempted": 179
+        },
+        "percentage": 0.6,
+        "head": {
+          "landed": 60,
+          "attempted": 120
+        },
+        "body": {
+          "landed": 41,
+          "attempted": 50
+        },
+        "leg": {
+          "landed": 7,
+          "attempted": 9
+        },
+        "distance": {
+          "landed": 86,
+          "attempted": 151
+        },
+        "clinch": {
+          "landed": 22,
+          "attempted": 27
+        },
+        "ground": {
+          "landed": 0,
+          "attempted": 1
+        }
+      },
+      "fighter2": {
+        "total": {
+          "landed": 59,
+          "attempted": 147
+        },
+        "percentage": 0.4,
+        "head": {
+          "landed": 39,
+          "attempted": 119
+        },
+        "body": {
+          "landed": 8,
+          "attempted": 16
+        },
+        "leg": {
+          "landed": 12,
+          "attempted": 12
+        },
+        "distance": {
+          "landed": 52,
+          "attempted": 134
+        },
+        "clinch": {
+          "landed": 7,
+          "attempted": 13
+        },
+        "ground": {
+          "landed": 0,
+          "attempted": 0
+        }
+      }
+    },
+    "perRound": [
+      {
+        "fighter1": {
+          "total": {
+            "landed": 27,
+            "attempted": 51
+          },
+          "percentage": 0.52,
+          "head": {
+            "landed": 10,
+            "attempted": 28
+          },
+          "body": {
+            "landed": 11,
+            "attempted": 16
+          },
+          "leg": {
+            "landed": 6,
+            "attempted": 7
+          },
+          "distance": {
+            "landed": 23,
+            "attempted": 45
+          },
+          "clinch": {
+            "landed": 4,
+            "attempted": 6
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 0
+          }
+        },
+        "fighter2": {
+          "total": {
+            "landed": 16,
+            "attempted": 46
+          },
+          "percentage": 0.34,
+          "head": {
+            "landed": 10,
+            "attempted": 40
+          },
+          "body": {
+            "landed": 2,
+            "attempted": 2
+          },
+          "leg": {
+            "landed": 4,
+            "attempted": 4
+          },
+          "distance": {
+            "landed": 13,
+            "attempted": 42
+          },
+          "clinch": {
+            "landed": 3,
+            "attempted": 4
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 0
+          }
+        }
+      },
+      {
+        "fighter1": {
+          "total": {
+            "landed": 33,
+            "attempted": 58
+          },
+          "percentage": 0.56,
+          "head": {
+            "landed": 19,
+            "attempted": 41
+          },
+          "body": {
+            "landed": 13,
+            "attempted": 16
+          },
+          "leg": {
+            "landed": 1,
+            "attempted": 1
+          },
+          "distance": {
+            "landed": 30,
+            "attempted": 53
+          },
+          "clinch": {
+            "landed": 3,
+            "attempted": 4
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 1
+          }
+        },
+        "fighter2": {
+          "total": {
+            "landed": 31,
+            "attempted": 64
+          },
+          "percentage": 0.48,
+          "head": {
+            "landed": 20,
+            "attempted": 49
+          },
+          "body": {
+            "landed": 6,
+            "attempted": 10
+          },
+          "leg": {
+            "landed": 5,
+            "attempted": 5
+          },
+          "distance": {
+            "landed": 27,
+            "attempted": 57
+          },
+          "clinch": {
+            "landed": 4,
+            "attempted": 7
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 0
+          }
+        }
+      },
+      {
+        "fighter1": {
+          "total": {
+            "landed": 48,
+            "attempted": 70
+          },
+          "percentage": 0.68,
+          "head": {
+            "landed": 31,
+            "attempted": 51
+          },
+          "body": {
+            "landed": 17,
+            "attempted": 18
+          },
+          "leg": {
+            "landed": 0,
+            "attempted": 1
+          },
+          "distance": {
+            "landed": 33,
+            "attempted": 53
+          },
+          "clinch": {
+            "landed": 15,
+            "attempted": 17
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 0
+          }
+        },
+        "fighter2": {
+          "total": {
+            "landed": 12,
+            "attempted": 37
+          },
+          "percentage": 0.32,
+          "head": {
+            "landed": 9,
+            "attempted": 30
+          },
+          "body": {
+            "landed": 0,
+            "attempted": 4
+          },
+          "leg": {
+            "landed": 3,
+            "attempted": 3
+          },
+          "distance": {
+            "landed": 12,
+            "attempted": 35
+          },
+          "clinch": {
+            "landed": 0,
+            "attempted": 2
+          },
+          "ground": {
+            "landed": 0,
+            "attempted": 0
+          }
+        }
+      }
+    ]
+  }
+}
