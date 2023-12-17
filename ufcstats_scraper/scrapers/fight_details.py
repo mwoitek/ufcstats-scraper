@@ -26,8 +26,10 @@ from pydantic import field_validator
 from pydantic import model_validator
 from requests.exceptions import RequestException
 
+from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
@@ -61,6 +63,8 @@ WeightClassType = Literal[
     "Light Heavyweight",
     "Heavyweight",
 ]
+
+logger = CustomLogger("fight_details")
 
 
 class Result(CustomModel):
@@ -316,7 +320,12 @@ class Fight(CustomModel):
 class FightDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fight_details"
 
+    id: int
     link: FightLink
+    event_name: str
+    fighter_1_name: str
+    fighter_2_name: str
+    db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
     scraped_data: Optional[Fight] = None
@@ -503,6 +512,13 @@ class FightDetailsScraper(CustomModel):
             dump(out_data, json_file, indent=2)
 
         self.success = True
+
+    def db_update_fight(self) -> None:
+        if not self.tried:
+            logger.info("Fight was not updated since no attempt was made to scrape data")
+            return
+        self.success = cast(bool, self.success)
+        self.db.update_status("fight", self.id, self.tried, self.success)
 
 
 if __name__ == "__main__":
