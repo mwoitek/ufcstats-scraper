@@ -17,6 +17,7 @@ from more_itertools import chunked
 from pydantic import Field
 from pydantic import NonNegativeInt
 from pydantic import PositiveInt
+from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_serializer
 from pydantic import field_validator
@@ -28,6 +29,7 @@ from ufcstats_scraper.common import console
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
+from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 
 BonusType = Literal[
@@ -266,12 +268,33 @@ class SignificantStrikes(CustomModel):
     per_round: list[FightersSignificantStrikes]
 
 
+# TODO: Finish this model!!!
+class Fight(CustomModel):
+    result: Result
+    box: Box
+    significant_strikes: SignificantStrikes
+
+    def to_dict(self) -> dict[str, Any]:
+        data_dict: dict[str, Any] = {}
+        data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
+        data_dict.update(self.box.model_dump(by_alias=True, exclude_none=True))
+        data_dict["significantStrikes"] = self.significant_strikes.model_dump(
+            by_alias=True,
+            exclude_none=True,
+        )
+        return data_dict
+
+
 class FightDetailsScraper(CustomModel):
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fight_details"
 
     link: FightLink
 
     soup: Optional[BeautifulSoup] = None
+    scraped_data: Optional[Fight] = None
+
+    tried: bool = False
+    success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -370,6 +393,8 @@ class FightDetailsScraper(CustomModel):
 
         cells_1: ResultSet[Tag] = table_bodies[2].find_all("td")
         cells_2: ResultSet[Tag] = table_bodies[3].find_all("td")
+        assert len(cells_1) % 9 == 0  # TODO: Remove
+        assert len(cells_2) % 9 == 0  # TODO: Remove
 
         batches: list[list[str]] = []
         for batch in chunked(chain(cells_1, cells_2), n=9):
@@ -416,18 +441,28 @@ class FightDetailsScraper(CustomModel):
 
         return SignificantStrikes(total=total, per_round=per_round)
 
+    def scrape(self) -> Fight:
+        self.tried = True
+        self.success = False
+
+        self.get_soup()
+
+        try:
+            data_dict: dict[str, Any] = {
+                "result": self.scrape_result(),
+                "box": self.scrape_box(),
+                "significant_strikes": self.scrape_significant_strikes(),
+            }
+            self.scraped_data = Fight.model_validate(data_dict)
+        except (AssertionError, IndexError, ValidationError) as exc:
+            raise NoScrapedDataError(self.link) from exc
+
+        return self.scraped_data
+
 
 if __name__ == "__main__":
     # TODO: Remove. Just a quick test.
     data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/226884e46a10865d"}
     scraper = FightDetailsScraper.model_validate(data_dict)
-    scraper.get_soup()
-
-    result = scraper.scrape_result()
-    console.print(result.model_dump(by_alias=True, exclude_none=True))
-
-    box = scraper.scrape_box()
-    console.print(box.model_dump(by_alias=True, exclude_none=True))
-
-    significant_strikes = scraper.scrape_significant_strikes()
-    console.print(significant_strikes.model_dump(by_alias=True, exclude_none=True))
+    fight = scraper.scrape()
+    console.print(fight.to_dict())
