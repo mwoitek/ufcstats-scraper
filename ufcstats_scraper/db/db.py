@@ -16,6 +16,7 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.common import TableName
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
+from ufcstats_scraper.db.models import DBFight
 from ufcstats_scraper.db.models import DBFighter
 
 if TYPE_CHECKING:
@@ -192,6 +193,42 @@ class LinksDB:
             fighter_ids[fighter] = self.cur.fetchone()[0]
         logger.debug(f"Found IDs for {len(fighter_ids)} fighters")
         return fighter_ids
+
+    def read_fights(
+        self,
+        select: LinkSelection = "untried",
+        limit: Optional[int] = None,
+    ) -> list[DBFight]:
+        query = """
+        SELECT
+          fight.id,
+          fight.link,
+          event.name AS event_name,
+          f1.name AS fighter_1_name,
+          f2.name AS fighter_2_name
+        FROM fight
+        INNER JOIN event
+          ON fight.event_id = event.id
+        INNER JOIN fighter AS f1
+          ON fight.fighter_1_id = f1.id
+        INNER JOIN fighter AS f2
+          ON fight.fighter_2_id = f2.id
+        """
+
+        match select:
+            case "untried":
+                query = f"{query} WHERE tried = 0"
+            case "failed":
+                query = f"{query} WHERE success = 0"
+            case "all":
+                pass
+
+        if isinstance(limit, int):
+            query = f"{query} LIMIT {limit}"
+
+        fights = [DBFight(*row) for row in self.cur.execute(query)]
+        logger.info(f"Read {len(fights)} fights from DB")
+        return fights
 
     def update_status(self, table: TableName, id: int, tried: bool, success: bool) -> None:
         query = (
