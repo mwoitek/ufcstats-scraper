@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 from itertools import chain
 from json import dump
+from math import isclose
 from os import mkdir
 from pathlib import Path
 from typing import Any
@@ -254,6 +255,35 @@ class FighterSignificantStrikes(CustomModel):
 
         percentage = int(match.group(1)) / 100
         return percentage
+
+    @model_validator(mode="after")
+    def check_totals(self) -> Self:
+        FIELDS = [["head", "body", "leg"], ["distance", "clinch", "ground"]]
+
+        for group in FIELDS:
+            total_landed = 0
+            total_attempted = 0
+
+            for field in group:
+                count = cast(Count, getattr(self, field))
+                total_landed += cast(int, count.landed)
+                total_attempted += cast(int, count.attempted)
+
+            assert total_landed == self.total.landed, "total landed is inconsistent"
+            assert total_attempted == self.total.attempted, "total attempted is inconsistent"
+
+        return self
+
+    @model_validator(mode="after")
+    def check_percentage(self) -> Self:
+        total_landed = cast(int, self.total.landed)
+        total_attempted = cast(int, self.total.attempted)
+
+        computed = round(total_landed / total_attempted, 2)
+        scraped = cast(float, self.percentage)
+        assert isclose(computed, scraped, abs_tol=0.1), "'total' and 'percentage' are inconsistent"
+
+        return self
 
 
 class FightersSignificantStrikes(CustomModel):
