@@ -1,4 +1,5 @@
 from datetime import date
+from datetime import timedelta
 from typing import Annotated
 
 from pydantic import HttpUrl
@@ -19,4 +20,5 @@ FighterLink = Annotated[HttpUrl, AfterValidator(check_fighter_link)]
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
 CustomDate = Annotated[date, PlainSerializer(lambda d: d.isoformat(), return_type=str)]
+CustomTimeDelta = Annotated[timedelta, PlainSerializer(lambda d: int(d.total_seconds()), return_type=int)]
 Stance = Annotated[str, AfterValidator(check_stance)]

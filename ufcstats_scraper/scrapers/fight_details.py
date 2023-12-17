@@ -21,7 +21,6 @@ from pydantic import NonNegativeInt
 from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import ValidationInfo
-from pydantic import field_serializer
 from pydantic import field_validator
 from pydantic import model_validator
 from requests.exceptions import RequestException
@@ -29,6 +28,7 @@ from requests.exceptions import RequestException
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
 from ufcstats_scraper.scrapers.common import CleanName
+from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
@@ -119,16 +119,12 @@ class Box(CustomModel):
     method: MethodType
     round: int = Field(..., ge=1, le=5)
     time_str: str = Field(..., exclude=True, pattern=r"\d{1}:\d{2}")
-    time: Optional[timedelta] = Field(default=None, validate_default=True)
+    time: Optional[CustomTimeDelta] = Field(default=None, validate_default=True)
     time_format: str = Field(..., pattern=r"\d{1} Rnd \((\d{1}-)+\d{1}\)")
     referee: CleanName
     details_str: str = Field(..., exclude=True)
     details: Optional[str] = None
     scorecards: Optional[list[Scorecard]] = None
-
-    @field_serializer("time", when_used="unless-none")
-    def serialize_time(self, time: timedelta) -> int:
-        return int(time.total_seconds())
 
     @field_validator("bonus")
     @classmethod
@@ -154,8 +150,8 @@ class Box(CustomModel):
 
     @field_validator("time")
     @classmethod
-    def fill_time(cls, time: Optional[timedelta], info: ValidationInfo) -> Optional[timedelta]:
-        if isinstance(time, timedelta):
+    def fill_time(cls, time: Optional[CustomTimeDelta], info: ValidationInfo) -> Optional[CustomTimeDelta]:
+        if time is not None:
             return time
 
         time_str = cast(str, info.data.get("time_str"))
