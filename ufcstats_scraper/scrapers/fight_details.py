@@ -6,12 +6,14 @@ from json import dump
 from math import isclose
 from os import mkdir
 from pathlib import Path
+from typing import Annotated
 from typing import Any
 from typing import ClassVar
 from typing import Literal
 from typing import Optional
 from typing import Self
 from typing import cast
+from typing import get_args
 
 import requests
 from bs4 import BeautifulSoup
@@ -24,6 +26,7 @@ from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
+from pydantic import model_serializer
 from pydantic import model_validator
 from requests.exceptions import RequestException
 
@@ -36,6 +39,7 @@ from ufcstats_scraper.db.models import DBFight
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
+from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
@@ -82,7 +86,11 @@ class Result(CustomModel):
     def fill_result(cls, result: Optional[ResultType], info: ValidationInfo) -> Optional[ResultType]:
         if result is not None:
             return result
-        match info.data.get(f"{info.field_name}_str"):
+
+        raw_result = info.data.get(f"{info.field_name}_str")
+        raw_result = cast(str, raw_result)
+
+        match raw_result:
             case "W":
                 return "Win"
             case "L":
@@ -92,7 +100,7 @@ class Result(CustomModel):
             case "NC":
                 return "No contest"
             case _:
-                raise ValueError("invalid result")
+                raise ValueError(f"invalid result: {raw_result}")
 
 
 class Scorecard(CustomModel):
@@ -106,9 +114,15 @@ class Scorecard(CustomModel):
         match = re.match(r"(\D+)(\d+) - (\d+)\. ?", self.score_str)
         match = cast(re.Match, match)
 
-        self.judge = cast(str, match.group(1)).strip()
-        self.fighter_1 = int(match.group(2))
-        self.fighter_2 = int(match.group(3))
+        judge = match.group(1)
+        judge = cast(str, judge)
+        judge = fix_consecutive_spaces(judge.strip())
+        assert len(judge) > 0, "judge's name cannot be empty"
+        self.judge = judge
+
+        for i in [1, 2]:
+            score = int(match.group(i + 1))
+            setattr(self, f"fighter_{i}", score)
 
         return self
 
@@ -122,9 +136,10 @@ class Box(CustomModel):
     )
     bonus_str: Optional[str] = Field(default=None, exclude=True)
     bonus: Optional[BonusType] = Field(default=None, validate_default=True)
-    sex: str = "Male"
+    sex: Literal["Female", "Male"] = "Male"
     weight_class: Optional[WeightClassType] = None
     title_bout: bool = False
+    interim_title: Optional[bool] = None
     method: MethodType
     round: int = Field(..., ge=1, le=5)
     time_str: str = Field(..., exclude=True, pattern=r"\d{1}:\d{2}")
@@ -155,7 +170,7 @@ class Box(CustomModel):
             case "ko":
                 return "KO of the Night"
             case _:
-                raise ValueError("invalid bonus")
+                raise ValueError(f"invalid bonus: {bonus_str}")
 
     @field_validator("time")
     @classmethod
@@ -163,7 +178,9 @@ class Box(CustomModel):
         if time is not None:
             return time
 
-        time_str = cast(str, info.data.get("time_str"))
+        time_str = info.data.get("time_str")
+        time_str = cast(str, time_str)
+
         match = re.match(r"(\d{1}):(\d{2})", time_str)
         match = cast(re.Match, match)
 
@@ -189,11 +206,17 @@ class Box(CustomModel):
         match = re.match(pattern, self.description, flags=re.IGNORECASE)
         match = cast(re.Match, match)
 
-        if match.group(3) is not None:
-            self.sex = "Female"
+        self.sex = "Female" if match.group(3) is not None else "Male"
 
-        self.weight_class = cast(str, match.group(4)).strip().title()  # pyright: ignore
+        weight_class = match.group(4)
+        weight_class = cast(str, weight_class)
+        weight_class = fix_consecutive_spaces(weight_class.strip().title())
+        assert weight_class in get_args(WeightClassType), f"invalid weight class: {weight_class}"
+        self.weight_class = weight_class  # pyright: ignore
+
         self.title_bout = match.group(5) is not None
+        if self.title_bout:
+            self.interim_title = match.group(2) is not None
 
         return self
 
@@ -203,7 +226,7 @@ class Box(CustomModel):
         matches = cast(list[str], matches)
 
         if len(matches) == 0:
-            self.details = self.details_str.capitalize()
+            self.details = fix_consecutive_spaces(self.details_str.capitalize())
         else:
             self.scorecards = [Scorecard(score_str=match) for match in matches]
 
@@ -211,7 +234,7 @@ class Box(CustomModel):
 
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
-        if self.method.startswith("Decision"):
+        if self.method.lower().startswith("decision"):
             assert self.details is None, "fields 'method' and 'details' are inconsistent"
             assert self.scorecards is not None, "fields 'method' and 'scorecards' are inconsistent"
         else:
@@ -243,7 +266,7 @@ class Count(CustomModel):
 class FighterSignificantStrikes(CustomModel):
     total: Count
     percentage_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    percentage: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
+    percentage: Optional[Annotated[float, Field(ge=0.0, le=1.0)]] = Field(default=None, validate_default=True)
     head: Count
     body: Count
     leg: Count
@@ -254,14 +277,17 @@ class FighterSignificantStrikes(CustomModel):
     @field_validator("percentage")
     @classmethod
     def fill_percentage(cls, percentage: Optional[float], info: ValidationInfo) -> Optional[float]:
-        if isinstance(percentage, float):
+        if percentage is not None:
             return percentage
 
-        percentage_str = cast(str, info.data.get("percentage_str"))
+        percentage_str = info.data.get("percentage_str")
+        percentage_str = cast(str, percentage_str)
+
         match = re.match(r"(\d+)%", percentage_str)
         match = cast(re.Match, match)
 
         percentage = int(match.group(1)) / 100
+        assert 0.0 <= percentage <= 1.0, f"invalid percentage: {percentage}"
         return percentage
 
     @model_validator(mode="after")
@@ -273,7 +299,9 @@ class FighterSignificantStrikes(CustomModel):
             total_attempted = 0
 
             for field in group:
-                count = cast(Count, getattr(self, field))
+                count = getattr(self, field)
+                count = cast(Count, count)
+
                 total_landed += cast(int, count.landed)
                 total_attempted += cast(int, count.attempted)
 
@@ -303,6 +331,8 @@ class SignificantStrikes(CustomModel):
     total: FightersSignificantStrikes
     per_round: list[FightersSignificantStrikes]
 
+    # TODO: Add validation
+
 
 # TODO: Finish this model!!!
 class Fight(CustomModel):
@@ -310,6 +340,7 @@ class Fight(CustomModel):
     box: Box
     significant_strikes: SignificantStrikes
 
+    @model_serializer
     def to_dict(self) -> dict[str, Any]:
         data_dict: dict[str, Any] = {}
         data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
@@ -362,10 +393,7 @@ class FightDetailsScraper(CustomModel):
         if len(is_) != 2:
             raise MissingHTMLElementError("Idiomatic tags (i.b-fight-details__person-status)")
 
-        return Result(
-            fighter_1_str=is_[0].get_text(),
-            fighter_2_str=is_[1].get_text(),
-        )
+        return Result(fighter_1_str=is_[0].get_text(), fighter_2_str=is_[1].get_text())
 
     def scrape_box(self) -> Box:
         if self.soup is None:
@@ -383,17 +411,19 @@ class FightDetailsScraper(CustomModel):
 
         # Scrape bonus
         imgs: ResultSet[Tag] = description.find_all("img")
-        assert len(imgs) <= 2  # TODO: Remove
+        assert len(imgs) <= 2, "got more than 2 images"
 
         for img in imgs:
-            src = cast(str, img.get("src"))
+            src = img.get("src")
+            src = cast(str, src)
+
             if src.endswith("belt.png"):
                 continue
 
             match = re.search(r"[^/]+/([a-z]+)\.png", src)
             match = cast(re.Match, match)
 
-            data_dict["bonus_str"] = cast(str, match.group(1))
+            data_dict["bonus_str"] = match.group(1)
             break
 
         ps: ResultSet[Tag] = box.find_all("p", class_="b-fight-details__text")
@@ -409,15 +439,14 @@ class FightDetailsScraper(CustomModel):
             )
 
         for i in is_:
-            text = re.sub(r"\s{2,}", " ", i.get_text().strip())
+            text = fix_consecutive_spaces(i.get_text().strip())
             field_name, field_value = text.split(": ")
             data_dict[field_name.lower()] = field_value
-
         data_dict["time_str"] = data_dict.pop("time")
         data_dict["time_format"] = data_dict.pop("time format")
 
         # Scrape second line
-        text = re.sub(r"\s{2,}", " ", ps[1].get_text().strip())
+        text = fix_consecutive_spaces(ps[1].get_text().strip())
         field_name, field_value = text.split(": ")
         data_dict[field_name.lower()] = field_value
         data_dict["details_str"] = data_dict.pop("details")
@@ -433,54 +462,44 @@ class FightDetailsScraper(CustomModel):
             raise MissingHTMLElementError("Table bodies (tbody)")
 
         cells_1: ResultSet[Tag] = table_bodies[2].find_all("td")
+        num_cells_1 = len(cells_1)
+        assert num_cells_1 > 0 and num_cells_1 % 9 == 0, f"invalid number of cells: {num_cells_1}"
+
         cells_2: ResultSet[Tag] = table_bodies[3].find_all("td")
-        assert len(cells_1) % 9 == 0  # TODO: Remove
-        assert len(cells_2) % 9 == 0  # TODO: Remove
+        num_cells_2 = len(cells_2)
+        assert num_cells_2 > 0 and num_cells_2 % 9 == 0, f"invalid number of cells: {num_cells_2}"
 
-        batches: list[list[str]] = []
-        for batch in chunked(chain(cells_1, cells_2), n=9):
-            batch = batch[1:]
-            batch[0], batch[1] = batch[1], batch[0]
-            processed = [re.sub(r"\s{2,}", " ", td.get_text().strip()) for td in batch]
-            batches.append(processed)
-
-        # Scrape totals
-        percentage_str_1, percentage_str_2 = batches[0][0].split(" ")
-        data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1}
-        data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2}
+        raw_tables: list[list[str]] = []
+        for cells in chunked(chain(cells_1, cells_2), n=9):
+            cells = cells[1:]
+            cells[0], cells[1] = cells[1], cells[0]
+            raw_table = [fix_consecutive_spaces(cell.get_text().strip()) for cell in cells]
+            raw_tables.append(raw_table)
+        assert len(raw_tables) >= 2, "there should be at least 2 tables"
 
         FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
-        for field, raw_value in zip(FIELDS, batches[0][1:]):
-            matches = cast(list[str], re.findall(r"\d+ of \d+", raw_value))
-            data_dict_1[field] = Count(count_str=matches[0])
-            data_dict_2[field] = Count(count_str=matches[1])
+        processed_tables: list[FightersSignificantStrikes] = []
 
-        total = FightersSignificantStrikes(
-            fighter_1=FighterSignificantStrikes.model_validate(data_dict_1),
-            fighter_2=FighterSignificantStrikes.model_validate(data_dict_2),
-        )
-
-        # Scrape "per round" data
-        per_round: list[FightersSignificantStrikes] = []
-
-        for processed in batches[1:]:
-            percentage_str_1, percentage_str_2 = processed[0].split(" ")
+        for raw_table in raw_tables:
+            percentage_str_1, percentage_str_2 = raw_table[0].split(" ")
             data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1}
             data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2}
 
-            for field, raw_value in zip(FIELDS, processed[1:]):
-                matches = cast(list[str], re.findall(r"\d+ of \d+", raw_value))
+            for field, raw_value in zip(FIELDS, raw_table[1:]):
+                matches = re.findall(r"\d+ of \d+", raw_value)
+                matches = cast(list[str], matches)
+
                 data_dict_1[field] = Count(count_str=matches[0])
                 data_dict_2[field] = Count(count_str=matches[1])
 
-            per_round.append(
+            processed_tables.append(
                 FightersSignificantStrikes(
                     fighter_1=FighterSignificantStrikes.model_validate(data_dict_1),
                     fighter_2=FighterSignificantStrikes.model_validate(data_dict_2),
                 )
             )
 
-        return SignificantStrikes(total=total, per_round=per_round)
+        return SignificantStrikes(total=processed_tables[0], per_round=processed_tables[1:])
 
     def scrape(self) -> Fight:
         self.tried = True
@@ -509,7 +528,7 @@ class FightDetailsScraper(CustomModel):
         except FileExistsError:
             pass
 
-        out_data = self.scraped_data.to_dict()
+        out_data = self.scraped_data.model_dump()
         file_name = str(self.link).split("/")[-1]
         out_file = FightDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:

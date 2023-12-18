@@ -1,4 +1,3 @@
-import re
 from typing import Callable
 from typing import Literal
 
@@ -22,10 +21,6 @@ def check_link(type_: LinkType) -> Callable[[HttpUrl], HttpUrl]:
 check_event_link = check_link("event")
 check_fight_link = check_link("fight")
 check_fighter_link = check_link("fighter")
-
-
-def fix_consecutive_spaces(s: str) -> str:
-    return re.sub(r"\s{2,}", " ", s)
 
 
 def check_stance(stance: str) -> str:
