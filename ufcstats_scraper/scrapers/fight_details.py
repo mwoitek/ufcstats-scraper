@@ -6,6 +6,7 @@ from json import dump
 from math import isclose
 from os import mkdir
 from pathlib import Path
+from time import sleep
 from typing import Annotated
 from typing import Any
 from typing import ClassVar
@@ -28,14 +29,18 @@ from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_serializer
 from pydantic import model_validator
+from pydantic import validate_call
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
+from ufcstats_scraper.common import progress
+from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
+from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
@@ -411,6 +416,7 @@ class FightDetailsScraper(CustomModel):
 
         # Scrape bonus
         imgs: ResultSet[Tag] = description.find_all("img")
+        # FIXME There can be more than one bonus!!!!!
         assert len(imgs) <= 2, "got more than 2 images"
 
         for img in imgs:
@@ -605,6 +611,71 @@ def scrape_fight(fight: DBFight) -> Fight:
 
     scraper.scraped_data = cast(Fight, scraper.scraped_data)
     return scraper.scraped_data
+
+
+@validate_call
+def scrape_fight_details(
+    select: LinkSelection,
+    limit: Optional[int] = None,
+    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+) -> None:
+    console.rule("[title]FIGHT DETAILS", style="title")
+
+    console.rule("[subtitle]FIGHT LINKS", style="subtitle")
+    console.print("Retrieving fight links...", justify="center", highlight=False)
+
+    fights: list[DBFight] = []
+    try:
+        with LinksDB() as db:
+            fights.extend(db.read_fights(select, limit))
+        console.print("Done!", style="success", justify="center")
+    except (DBNotSetupError, sqlite3.Error) as exc:
+        logger.exception("Failed to read fights from DB")
+        console.print("Failed!", style="danger", justify="center")
+        raise exc
+
+    num_fights = len(fights)
+    if num_fights == 0:
+        console.print("No fight to scrape.", style="info", justify="center")
+        return
+    console.print(
+        f"Got {num_fights} fight(s) to scrape.",
+        style="success",
+        justify="center",
+        highlight=False,
+    )
+
+    with progress:
+        task = progress.add_task("Scraping fights...", total=num_fights)
+        ok_count = 0
+
+        for i, fight in enumerate(fights, start=1):
+            try:
+                scrape_fight(fight)
+                ok_count += 1
+            except ScraperError:
+                pass
+
+            progress.update(task, advance=1)
+
+            if i < num_fights:
+                console.print(
+                    f"Continuing in {delay} second(s)...",
+                    style="info",
+                    justify="center",
+                    highlight=False,
+                )
+                sleep(delay)
+
+    console.rule("[subtitle]SUMMARY", style="subtitle")
+
+    if ok_count == 0:
+        logger.error("Failed to scrape data for all fights")
+        console.print("No data was scraped.", style="danger", justify="center")
+        raise NoScrapedDataError("http://ufcstats.com/fight-details/")
+
+    count_str = "all fights" if num_fights == ok_count else f"{ok_count} out of {num_fights} fight(s)"
+    console.print(f"Successfully scraped data for {count_str}.", style="info", justify="center")
 
 
 if __name__ == "__main__":
