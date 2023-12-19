@@ -355,6 +355,18 @@ class SignificantStrikes(CustomModel):
 
     # TODO: Add validation
 
+    @model_serializer
+    def to_dict(self) -> dict[str, Any]:
+        data_dict: dict[str, Any] = {}
+        data_dict["total"] = self.total.model_dump(by_alias=True, exclude_none=True)
+
+        per_round_dict: dict[str, Any] = {}
+        for i, round_data in enumerate(self.per_round, start=1):
+            per_round_dict[f"round{i}"] = round_data.model_dump(by_alias=True, exclude_none=True)
+        data_dict["perRound"] = per_round_dict
+
+        return data_dict
+
 
 # TODO: Finish this model!!!
 class Fight(CustomModel):
