@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from argparse import ArgumentParser
 from datetime import timedelta
 from itertools import chain
 from json import dump
@@ -679,9 +680,41 @@ def scrape_fight_details(
 
 
 if __name__ == "__main__":
-    # TODO: Remove. Just a quick test.
-    data_dict: dict[str, Any] = {"link": "http://www.ufcstats.com/fight-details/226884e46a10865d"}
-    scraper = FightDetailsScraper.model_validate(data_dict)
-    fight = scraper.scrape()
-    console.print(fight.to_dict())
-    scraper.save_json()
+    parser = ArgumentParser(description="Script for scraping fight details.")
+    parser.add_argument(
+        "-d",
+        "--delay",
+        type=float,
+        default=DEFAULT_DELAY,
+        dest="delay",
+        help="set delay between requests",
+    )
+    parser.add_argument(
+        "-f",
+        "--filter",
+        type=str,
+        choices=["all", "failed", "untried"],
+        default="untried",
+        dest="select",
+        help="filter fights in the database",
+    )
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=-1,
+        dest="limit",
+        help="limit the number of fights to scrape",
+    )
+    parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
+    args = parser.parse_args()
+
+    limit = args.limit if args.limit > 0 else None
+    console.quiet = args.quiet
+    try:
+        scrape_fight_details(args.select, limit, args.delay)
+    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
+        logger.exception("Failed to run main function")
+        console.quiet = False
+        console.print_exception()
+        exit(1)
