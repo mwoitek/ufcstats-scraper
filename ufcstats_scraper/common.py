@@ -1,4 +1,5 @@
 import logging
+from os import environ
 from pathlib import Path
 from typing import Optional
 
@@ -12,8 +13,6 @@ from rich.progress import Progress
 from rich.progress import TaskProgressColumn
 from rich.progress import TextColumn
 from rich.theme import Theme
-
-LOG_DIR = Path(__file__).resolve().parents[1] / "log"
 
 custom_theme = Theme(
     {
@@ -34,6 +33,8 @@ progress = Progress(
     transient=True,
 )
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "log"
+
 
 class CustomLogger:
     def __init__(self, name: str, file_name: Optional[str] = None) -> None:
@@ -42,9 +43,17 @@ class CustomLogger:
 
         if file_name is None:
             file_name = name
+        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log")
 
-        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log", mode="w")
-        self.handler.setLevel(logging.DEBUG)
+        log_level_raw = environ.get("LOG_LEVEL")
+        if log_level_raw is None:
+            log_level = logging.DEBUG
+        else:
+            try:
+                log_level: int = getattr(logging, log_level_raw)
+            except AttributeError:
+                log_level = logging.DEBUG
+        self.handler.setLevel(log_level)
 
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(funcName)s [%(levelname)s] %(message)s",
