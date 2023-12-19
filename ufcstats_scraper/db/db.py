@@ -217,9 +217,9 @@ class LinksDB:
 
         match select:
             case "untried":
-                query = f"{query} WHERE tried = 0"
+                query = f"{query} WHERE fight.tried = 0"
             case "failed":
-                query = f"{query} WHERE success = 0"
+                query = f"{query} WHERE fight.success = 0"
             case "all":
                 pass
 
