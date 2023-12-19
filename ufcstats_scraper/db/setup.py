@@ -1,11 +1,13 @@
 import sqlite3
 from argparse import ArgumentParser
+from pathlib import Path
 
 from ufcstats_scraper.common import console
 from ufcstats_scraper.db.common import DB_PATH
-from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
+
+SQL_SCRIPTS_DIR = Path(__file__).resolve().parent / "sql_scripts"
 
 
 class DBCreator:
@@ -14,7 +16,10 @@ class DBCreator:
         self.cur = self.conn.cursor()
 
     def __del__(self) -> None:
-        self.conn.close()
+        try:
+            self.conn.close()
+        except AttributeError:
+            pass
 
     @staticmethod
     def read_sql_script(script_name: str) -> str:
