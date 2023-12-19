@@ -133,15 +133,14 @@ class Scorecard(CustomModel):
         return self
 
 
-# TODO: Choose better name
 class Box(CustomModel):
     description: str = Field(
         ...,
         exclude=True,
         pattern=r"(UFC )?(Interim )?(Women's )?[A-Za-z ]+?(Title )?Bout",
     )
-    bonus_str: Optional[str] = Field(default=None, exclude=True)
-    bonus: Optional[BonusType] = Field(default=None, validate_default=True)
+    bonus_links: list[str] = Field(..., exclude=True)
+    bonuses: Optional[list[BonusType]] = Field(default=None, validate_default=True)
     sex: Literal["Female", "Male"] = "Male"
     weight_class: Optional[WeightClassType] = None
     title_bout: bool = False
@@ -156,27 +155,44 @@ class Box(CustomModel):
     details: Optional[str] = None
     scorecards: Optional[list[Scorecard]] = None
 
-    @field_validator("bonus")
+    @field_validator("bonuses")
     @classmethod
-    def fill_bonus(cls, bonus: Optional[BonusType], info: ValidationInfo) -> Optional[BonusType]:
-        if bonus is not None:
-            return bonus
+    def fill_bonuses(
+        cls,
+        bonuses: Optional[list[BonusType]],
+        info: ValidationInfo,
+    ) -> Optional[list[BonusType]]:
+        if bonuses is not None:
+            return bonuses
 
-        bonus_str = info.data.get("bonus_str")
-        if not isinstance(bonus_str, str):
-            return
+        bonus_links = info.data.get("bonus_links")
+        bonus_links = cast(list[str], bonus_links)
 
-        match bonus_str:
-            case "fight":
-                return "Fight of the Night"
-            case "perf":
-                return "Performance of the Night"
-            case "sub":
-                return "Submission of the Night"
-            case "ko":
-                return "KO of the Night"
-            case _:
-                raise ValueError(f"invalid bonus: {bonus_str}")
+        bonuses = []
+
+        for link in bonus_links:
+            if link.endswith("belt.png"):
+                continue
+
+            match = re.search(r"[^/]+/([a-z]+)\.png", link)
+            match = cast(re.Match, match)
+
+            bonus = match.group(1)
+            bonus = cast(str, bonus)
+
+            match bonus:
+                case "fight":
+                    bonuses.append("Fight of the Night")
+                case "perf":
+                    bonuses.append("Performance of the Night")
+                case "sub":
+                    bonuses.append("Submission of the Night")
+                case "ko":
+                    bonuses.append("KO of the Night")
+                case _:
+                    raise ValueError(f"invalid bonus: {bonus}")
+
+        return bonuses
 
     @field_validator("time")
     @classmethod
@@ -415,23 +431,9 @@ class FightDetailsScraper(CustomModel):
             raise MissingHTMLElementError("Description tag (i.b-fight-details__fight-title)")
         data_dict: dict[str, Any] = {"description": description.get_text()}
 
-        # Scrape bonus
+        # Scrape bonuses
         imgs: ResultSet[Tag] = description.find_all("img")
-        # FIXME There can be more than one bonus!!!!!
-        assert len(imgs) <= 2, "got more than 2 images"
-
-        for img in imgs:
-            src = img.get("src")
-            src = cast(str, src)
-
-            if src.endswith("belt.png"):
-                continue
-
-            match = re.search(r"[^/]+/([a-z]+)\.png", src)
-            match = cast(re.Match, match)
-
-            data_dict["bonus_str"] = match.group(1)
-            break
+        data_dict["bonus_links"] = [img.get("src") for img in imgs]
 
         ps: ResultSet[Tag] = box.find_all("p", class_="b-fight-details__text")
         if len(ps) != 2:
