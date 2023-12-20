@@ -43,6 +43,7 @@ sqlite3.register_adapter(AnyUrl, adapt_url)
 sqlite3.register_adapter(datetime, adapt_datetime)
 
 
+# TODO: Make more robust
 def is_db_setup() -> bool:
     if not DB_PATH.exists():
         return False
@@ -57,6 +58,8 @@ def is_db_setup() -> bool:
     return len(results) == len(TABLES)
 
 
+# NOTE: This function may seem useless, but in the earlier UFC events some
+# fighters fought more than once in the same night.
 def get_unique_fighters(fights: Collection["Fight"]) -> set["EventFighter"]:
     fighters: set["EventFighter"] = set()
     for fight in fights:
@@ -77,6 +80,8 @@ class LinksDB:
 
     def __del__(self) -> None:
         try:
+            self.conn.commit()
+            logger.info("Committed changes to DB")
             self.conn.close()
             logger.info("Closed DB connection")
         except AttributeError:
@@ -87,6 +92,8 @@ class LinksDB:
 
     def __exit__(self, *exc: Any) -> bool:
         try:
+            self.conn.commit()
+            logger.info("Committed changes to DB")
             self.conn.close()
             logger.info("Closed DB connection")
         except AttributeError:
@@ -106,7 +113,6 @@ class LinksDB:
             params = {"link": event.link, "name": event.name}
             self.cur.execute(query, params)
             logger.debug(f"New event: {params}")
-        self.conn.commit()
 
     def insert_fighters(self, fighters: Collection[Fighter]) -> None:
         logger.debug(f"Got {len(fighters)} fighters to insert into DB")
@@ -116,8 +122,8 @@ class LinksDB:
             params = {"link": fighter.link, "name": fighter.name}
             self.cur.execute(query, params)
             logger.debug(f"New fighter: {params}")
-        self.conn.commit()
 
+    # FIXME This method should also update the status of some fighters
     def insert_fights(self, fights: Collection["Fight"]) -> None:
         fighters = get_unique_fighters(fights)
         fighter_ids = self.read_fighter_ids(fighters)
@@ -137,7 +143,6 @@ class LinksDB:
             }
             self.cur.execute(query, params)
             logger.debug(f"New fight: {params}")
-        self.conn.commit()
 
     @staticmethod
     def build_read_query(
@@ -171,7 +176,7 @@ class LinksDB:
     def read_events(self, select: LinkSelection = "untried", limit: Optional[int] = None) -> list[DBEvent]:
         query = LinksDB.build_read_query(table="event", extra_cols="name", select=select, limit=limit)
         events = [DBEvent(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(events)} events from DB")
+        logger.debug(f"Read {len(events)} events from DB")
         return events
 
     def read_fighters(
@@ -181,7 +186,7 @@ class LinksDB:
     ) -> list[DBFighter]:
         query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select, limit=limit)
         fighters = [DBFighter(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(fighters)} fighters from DB")
+        logger.debug(f"Read {len(fighters)} fighters from DB")
         return fighters
 
     def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
@@ -227,10 +232,10 @@ class LinksDB:
             query = f"{query} LIMIT {limit}"
 
         fights = [DBFight(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(fights)} fights from DB")
+        logger.debug(f"Read {len(fights)} fights from DB")
         return fights
 
-    def update_status(self, table: TableName, id: int, tried: bool, success: bool) -> None:
+    def update_status(self, table: TableName, id: int, tried: bool, success: Optional[bool]) -> None:
         query = (
             f"UPDATE {table} SET updated_at = :updated_at, tried = :tried, success = :success "
             "WHERE id = :id"
@@ -239,4 +244,3 @@ class LinksDB:
         self.cur.execute(query, params)
         logger.debug(f"Update {table} table")
         logger.debug(f"New status: {params}")
-        self.conn.commit()
