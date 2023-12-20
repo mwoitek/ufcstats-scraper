@@ -16,8 +16,12 @@ from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
+from pydantic import NonNegativeInt
+from pydantic import PositiveFloat
+from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
@@ -48,16 +52,18 @@ class Fighter(CustomModel):
     first_name: Optional[CleanName] = None
     last_name: Optional[CleanName] = None
     nickname: Optional[CleanName] = None
-    height_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d{1}' \d{1,2}\"")
-    height: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    weight_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+ lbs[.]")
-    weight: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    reach_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+[.]0\"")
-    reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
+    height_str: Optional[Annotated[str, Field(pattern=r"\d{1}' \d{1,2}\"")]] = Field(
+        default=None, exclude=True
+    )
+    height: Optional[PositiveInt] = Field(default=None, validate_default=True)
+    weight_str: Optional[Annotated[str, Field(pattern=r"\d+ lbs[.]")]] = Field(default=None, exclude=True)
+    weight: Optional[PositiveInt] = Field(default=None, validate_default=True)
+    reach_str: Optional[Annotated[str, Field(pattern=r"\d+[.]0\"")]] = Field(default=None, exclude=True)
+    reach: Optional[PositiveInt] = Field(default=None, validate_default=True)
     stance: Optional[Stance] = None
-    wins: int = Field(..., ge=0)
-    losses: int = Field(..., ge=0)
-    draws: int = Field(..., ge=0)
+    wins: NonNegativeInt
+    losses: NonNegativeInt
+    draws: NonNegativeInt
     current_champion: bool = False
 
     @property
@@ -78,8 +84,8 @@ class Fighter(CustomModel):
 
     @field_validator("height")
     @classmethod
-    def fill_height(cls, height: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(height, int):
+    def fill_height(cls, height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if height is not None:
             return height
 
         height_str = info.data.get("height_str")
@@ -97,8 +103,8 @@ class Fighter(CustomModel):
 
     @field_validator("weight")
     @classmethod
-    def fill_weight(cls, weight: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(weight, int):
+    def fill_weight(cls, weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if weight is not None:
             return weight
 
         weight_str = info.data.get("weight_str")
@@ -113,8 +119,8 @@ class Fighter(CustomModel):
 
     @field_validator("reach")
     @classmethod
-    def fill_reach(cls, reach: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(reach, int):
+    def fill_reach(cls, reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if reach is not None:
             return reach
 
         reach_str = info.data.get("reach_str")
@@ -132,7 +138,7 @@ class FightersListScraper(CustomModel):
     BASE_URL: ClassVar[str] = "http://www.ufcstats.com/statistics/fighters"
     DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighters_list"
 
-    letter: str = Field(..., pattern=r"[a-z]{1}")
+    letter: Annotated[str, Field(pattern=r"[a-z]{1}")]
     db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
@@ -163,7 +169,7 @@ class FightersListScraper(CustomModel):
         if not isinstance(table_body, Tag):
             raise MissingHTMLElementError("Table body (tbody)")
 
-        rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
+        rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
             raise MissingHTMLElementError("Table rows (tr)")
 
@@ -172,17 +178,15 @@ class FightersListScraper(CustomModel):
 
     @staticmethod
     def scrape_row(row: Tag) -> Fighter:
-        cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
+        cols: ResultSet[Tag] = row.find_all("td")
         if len(cols) != 11:
             raise MissingHTMLElementError("Row columns (td)")
-
-        data_dict: dict[str, Any] = {}
 
         # Scrape link
         anchor = cols[0].find("a")
         if not isinstance(anchor, Tag):
             raise MissingHTMLElementError("Anchor tag (a)")
-        data_dict["link"] = anchor.get("href")
+        data_dict: dict[str, Any] = {"link": anchor.get("href")}
 
         # Scrape all other fields except for current_champion
         FIELDS = [
@@ -217,6 +221,7 @@ class FightersListScraper(CustomModel):
                 fighter = FightersListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
+                logger.debug(f"Row: {row}")
                 continue
             scraped_data.append(fighter)
 
@@ -243,7 +248,7 @@ class FightersListScraper(CustomModel):
 
         self.success = True
 
-    def update_links_db(self) -> None:
+    def db_insert_fighters(self) -> None:
         if self.success:
             self.scraped_data = cast(list[Fighter], self.scraped_data)
             self.db.insert_fighters(self.scraped_data)
@@ -251,7 +256,6 @@ class FightersListScraper(CustomModel):
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
 
-@validate_call
 def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fighter]:
     letter_upper = letter.upper()
     console.rule(f"[subtitle]{letter_upper}", style="subtitle")
@@ -291,12 +295,12 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
         console.print("Failed!", style="danger", justify="center")
         raise exc
 
-    console.print("Updating links DB...", justify="center", highlight=False)
+    console.print("Inserting fighter data into DB...", justify="center", highlight=False)
     try:
-        scraper.update_links_db()
+        scraper.db_insert_fighters()
         console.print("Done!", style="success", justify="center")
     except sqlite3.Error as exc:
-        logger.exception("Failed to update links DB")
+        logger.exception("Failed to insert fighter data into DB")
         console.print("Failed!", style="danger", justify="center")
         raise exc
 
@@ -304,7 +308,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
 
 
 @validate_call
-def scrape_fighters_list(delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY) -> None:
+def scrape_fighters_list(delay: PositiveFloat = DEFAULT_DELAY) -> None:
     console.rule("[title]FIGHTERS LIST", style="title")
 
     all_fighters: list[Fighter] = []
