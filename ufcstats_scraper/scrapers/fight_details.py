@@ -31,6 +31,7 @@ from pydantic import field_validator
 from pydantic import model_serializer
 from pydantic import model_validator
 from pydantic import validate_call
+from pydantic.functional_serializers import PlainSerializer
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
@@ -43,7 +44,6 @@ from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
-from ufcstats_scraper.scrapers.common import CustomTimeDelta
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
@@ -77,6 +77,7 @@ WeightClassType = Literal[
     "Light Heavyweight",
     "Heavyweight",
 ]
+CustomTimeDelta = Annotated[timedelta, PlainSerializer(lambda d: int(d.total_seconds()), return_type=int)]
 
 logger = CustomLogger("fight_details")
 
