@@ -91,7 +91,7 @@ class EventsListScraper:
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> list[Tag]:
+    def get_table_rows(self) -> ResultSet[Tag]:
         if not hasattr(self, "soup"):
             raise NoSoupError
 

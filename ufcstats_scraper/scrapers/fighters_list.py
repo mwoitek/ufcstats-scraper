@@ -142,7 +142,7 @@ class FightersListScraper(CustomModel):
     db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
-    rows: Optional[list[Tag]] = None
+    rows: Optional[ResultSet[Tag]] = None
     scraped_data: Optional[list[Fighter]] = None
 
     success: bool = False
@@ -161,7 +161,7 @@ class FightersListScraper(CustomModel):
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> list[Tag]:
+    def get_table_rows(self) -> ResultSet[Tag]:
         if self.soup is None:
             raise NoSoupError
 
@@ -213,7 +213,7 @@ class FightersListScraper(CustomModel):
     def scrape(self) -> list[Fighter]:
         self.get_soup()
         self.get_table_rows()
-        self.rows = cast(list[Tag], self.rows)
+        self.rows = cast(ResultSet[Tag], self.rows)
 
         scraped_data: list[Fighter] = []
         for row in self.rows:
