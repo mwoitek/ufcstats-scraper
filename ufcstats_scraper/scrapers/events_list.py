@@ -12,6 +12,7 @@ from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
 from pydantic import ValidationError
@@ -98,7 +99,7 @@ class EventsListScraper:
         if not isinstance(table_body, Tag):
             raise MissingHTMLElementError("Table body (tbody)")
 
-        rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
+        rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
             raise MissingHTMLElementError("Table rows (tr)")
 
@@ -107,7 +108,7 @@ class EventsListScraper:
 
     @staticmethod
     def scrape_row(row: Tag) -> Event:
-        cols = [c for c in row.find_all("td") if isinstance(c, Tag)]
+        cols: ResultSet[Tag] = row.find_all("td")
         if len(cols) != 2:
             raise MissingHTMLElementError("Row columns (td)")
 
@@ -138,8 +139,9 @@ class EventsListScraper:
         for row in self.rows:
             try:
                 event = EventsListScraper.scrape_row(row)
-            except (MissingHTMLElementError, ValidationError, ValueError):
+            except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
+                logger.debug(f"Row: {row}")
                 continue
             if event.date < today:
                 scraped_data.append(event)
@@ -166,7 +168,7 @@ class EventsListScraper:
 
         self.success = True
 
-    def update_links_db(self) -> None:
+    def db_insert_events(self) -> None:
         if self.success:
             self.db.insert_events(self.scraped_data)
         else:
@@ -204,17 +206,17 @@ def scrape_events_list() -> None:
     try:
         scraper.save_json()
         console.print("Done!", style="success", justify="center")
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         logger.exception("Failed to save data to JSON")
         console.print("Failed!", style="danger", justify="center")
         raise exc
 
-    console.print("Updating links DB...", justify="center", highlight=False)
+    console.print("Inserting event data into DB...", justify="center", highlight=False)
     try:
-        scraper.update_links_db()
+        scraper.db_insert_events()
         console.print("Done!", style="success", justify="center")
     except sqlite3.Error as exc:
-        logger.exception("Failed to update links DB")
+        logger.exception("Failed to insert event data into DB")
         console.print("Failed!", style="danger", justify="center")
         raise exc
 
@@ -227,7 +229,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_events_list()
-    except (DBNotSetupError, OSError, ScraperError, sqlite3.Error):
+    except (DBNotSetupError, OSError, ScraperError, ValueError, sqlite3.Error):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
