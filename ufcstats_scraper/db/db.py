@@ -75,26 +75,23 @@ class LinksDB:
         self.cur = self.conn.cursor()
         logger.info("Opened DB connection")
 
-    def __del__(self) -> None:
+    def close(self) -> None:
         try:
             self.conn.commit()
             logger.info("Committed changes to DB")
             self.conn.close()
             logger.info("Closed DB connection")
-        except AttributeError:
-            pass
+        except (AttributeError, sqlite3.ProgrammingError):
+            logger.exception("")
+
+    def __del__(self) -> None:
+        self.close()
 
     def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: Any) -> bool:
-        try:
-            self.conn.commit()
-            logger.info("Committed changes to DB")
-            self.conn.close()
-            logger.info("Closed DB connection")
-        except AttributeError:
-            pass
+        self.close()
         return False
 
     def link_exists(self, table: TableName, link: AnyUrl) -> bool:
