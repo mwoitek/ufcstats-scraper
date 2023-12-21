@@ -1,7 +1,6 @@
 import re
 import sqlite3
 from argparse import ArgumentParser
-from datetime import date
 from datetime import datetime
 from json import dump
 from os import mkdir
@@ -16,8 +15,12 @@ from typing import cast
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
+from pydantic import NonNegativeFloat
+from pydantic import NonNegativeInt
+from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import ValidationInfo
 from pydantic import field_validator
@@ -38,10 +41,14 @@ from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
+from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+
+PercStr = Annotated[str, Field(pattern=r"\d+%")]
+PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
 
 logger = CustomLogger("fighter_details")
 
@@ -54,10 +61,10 @@ class Header(CustomModel):
     name: CleanName
     nickname: Optional[CleanName] = None
     record_str: str = Field(..., exclude=True, pattern=r"Record: \d+-\d+-\d+( [(]\d+ NC[)])?")
-    wins: Optional[int] = Field(default=None, ge=0)
-    losses: Optional[int] = Field(default=None, ge=0)
-    draws: Optional[int] = Field(default=None, ge=0)
-    no_contests: Optional[int] = Field(default=None, ge=0)
+    wins: Optional[NonNegativeInt] = None
+    losses: Optional[NonNegativeInt] = None
+    draws: Optional[NonNegativeInt] = None
+    no_contests: Optional[NonNegativeInt] = None
 
     @model_validator(mode="after")
     def fill_record(self) -> Self:
@@ -74,14 +81,18 @@ class Header(CustomModel):
 
 
 class PersonalInfo(CustomModel):
-    height_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d{1}' \d{1,2}\"")
-    height: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    weight_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+ lbs[.]")
-    weight: Optional[int] = Field(default=None, validate_default=True, gt=0)
-    reach_str: Optional[str] = Field(default=None, exclude=True, pattern=r"\d+\"")
-    reach: Optional[int] = Field(default=None, validate_default=True, gt=0)
+    height_str: Optional[Annotated[str, Field(pattern=r"\d{1}' \d{1,2}\"")]] = Field(
+        default=None, exclude=True
+    )
+    height: Optional[PositiveInt] = Field(default=None, validate_default=True)
+    weight_str: Optional[Annotated[str, Field(pattern=r"\d+ lbs[.]")]] = Field(default=None, exclude=True)
+    weight: Optional[PositiveInt] = Field(default=None, validate_default=True)
+    reach_str: Optional[Annotated[str, Field(pattern=r"\d+\"")]] = Field(default=None, exclude=True)
+    reach: Optional[PositiveInt] = Field(default=None, validate_default=True)
     stance: Optional[Stance] = None
-    date_of_birth_str: Optional[str] = Field(default=None, exclude=True, pattern=r"[A-Za-z]{3} \d{2}, \d{4}")
+    date_of_birth_str: Optional[Annotated[str, Field(pattern=r"[A-Za-z]{3} \d{2}, \d{4}")]] = Field(
+        default=None, exclude=True
+    )
     date_of_birth: Optional[CustomDate] = Field(default=None, validate_default=True)
 
     # NOTE: The next 3 validators are the same (or almost the same) as the
@@ -91,8 +102,8 @@ class PersonalInfo(CustomModel):
 
     @field_validator("height")
     @classmethod
-    def fill_height(cls, height: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(height, int):
+    def fill_height(cls, height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if height is not None:
             return height
 
         height_str = info.data.get("height_str")
@@ -110,8 +121,8 @@ class PersonalInfo(CustomModel):
 
     @field_validator("weight")
     @classmethod
-    def fill_weight(cls, weight: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(weight, int):
+    def fill_weight(cls, weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if weight is not None:
             return weight
 
         weight_str = info.data.get("weight_str")
@@ -126,8 +137,8 @@ class PersonalInfo(CustomModel):
 
     @field_validator("reach")
     @classmethod
-    def fill_reach(cls, reach: Optional[int], info: ValidationInfo) -> Optional[int]:
-        if isinstance(reach, int):
+    def fill_reach(cls, reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+        if reach is not None:
             return reach
 
         reach_str = info.data.get("reach_str")
@@ -147,7 +158,7 @@ class PersonalInfo(CustomModel):
         date_of_birth: Optional[CustomDate],
         info: ValidationInfo,
     ) -> Optional[CustomDate]:
-        if isinstance(date_of_birth, date):
+        if date_of_birth is not None:
             return date_of_birth
 
         date_of_birth_str = info.data.get("date_of_birth_str")
@@ -159,23 +170,23 @@ class PersonalInfo(CustomModel):
 
 
 class CareerStats(CustomModel):
-    slpm: float = Field(..., ge=0.0)
-    str_acc_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    str_acc: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
-    sapm: float = Field(..., ge=0.0)
-    str_def_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    str_def: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
-    td_avg: float = Field(..., ge=0.0)
-    td_acc_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    td_acc: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
-    td_def_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    td_def: Optional[float] = Field(default=None, validate_default=True, ge=0.0, le=1.0)
-    sub_avg: float = Field(..., ge=0.0)
+    slpm: NonNegativeFloat
+    str_acc_str: PercStr = Field(..., exclude=True)
+    str_acc: Optional[PercRatio] = Field(default=None, validate_default=True)
+    sapm: NonNegativeFloat
+    str_def_str: PercStr = Field(..., exclude=True)
+    str_def: Optional[PercRatio] = Field(default=None, validate_default=True)
+    td_avg: NonNegativeFloat
+    td_acc_str: PercStr = Field(..., exclude=True)
+    td_acc: Optional[PercRatio] = Field(default=None, validate_default=True)
+    td_def_str: PercStr = Field(..., exclude=True)
+    td_def: Optional[PercRatio] = Field(default=None, validate_default=True)
+    sub_avg: NonNegativeFloat
 
     @field_validator("str_acc", "str_def", "td_acc", "td_def")
     @classmethod
-    def fill_ratio(cls, value: Optional[float], info: ValidationInfo) -> Optional[float]:
-        if isinstance(value, float):
+    def fill_ratio(cls, value: Optional[PercRatio], info: ValidationInfo) -> Optional[PercRatio]:
+        if value is not None:
             return value
 
         field_str = info.data.get(f"{info.field_name}_str")
@@ -186,6 +197,8 @@ class CareerStats(CustomModel):
 
         percent = int(match.group(1))
         ratio = percent / 100
+        assert 0.0 <= ratio <= 1.0, f"{info.field_name} - invalid ratio: {ratio}"
+
         return ratio
 
 
@@ -298,7 +311,7 @@ class FighterDetailsScraper(CustomModel):
         if not isinstance(box_list, Tag):
             raise MissingHTMLElementError("Box list (ul.b-list__box-list)")
 
-        items = [li for li in box_list.find_all("li") if isinstance(li, Tag)]
+        items: ResultSet[Tag] = box_list.find_all("li")
         if len(items) != 5:
             raise MissingHTMLElementError("List items (li)")
 
@@ -306,7 +319,7 @@ class FighterDetailsScraper(CustomModel):
 
         # Actual scraping logic
         for item in items:
-            text = re.sub(r"\s{2,}", " ", item.get_text())
+            text = fix_consecutive_spaces(item.get_text())
             field_name, field_value = [p.strip().strip("-") for p in text.split(": ")]
             if field_value != "":
                 data_dict[field_name.lower()] = field_value
@@ -326,7 +339,7 @@ class FighterDetailsScraper(CustomModel):
         if not isinstance(box, Tag):
             raise MissingHTMLElementError("Box (div.b-list__info-box-left.clearfix)")
 
-        items = [li for li in box.find_all("li") if isinstance(li, Tag)]
+        items: ResultSet[Tag] = box.find_all("li")
         if len(items) != 9:
             raise MissingHTMLElementError("List items (li)")
 
@@ -334,7 +347,7 @@ class FighterDetailsScraper(CustomModel):
 
         # Actual scraping logic
         for item in items:
-            text = re.sub(r"\s{2,}", " ", item.get_text()).strip()
+            text = fix_consecutive_spaces(item.get_text()).strip()
             # One of the li's is empty. This deals with this case:
             if text == "":
                 continue
@@ -372,7 +385,7 @@ class FighterDetailsScraper(CustomModel):
         try:
             mkdir(FighterDetailsScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
-            pass
+            logger.info(f"Directory {FighterDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.to_dict(redundant=redundant)
         file_name = str(self.link).split("/")[-1]
@@ -386,7 +399,6 @@ class FighterDetailsScraper(CustomModel):
         if not self.tried:
             logger.info("Fighter was not updated since no attempt was made to scrape data")
             return
-        self.success = cast(bool, self.success)
         self.db.update_status("fighter", self.id, self.tried, self.success)
 
 
