@@ -12,6 +12,7 @@ from typing import ClassVar
 from typing import Optional
 from typing import Self
 from typing import cast
+from typing import get_args
 
 import requests
 from bs4 import BeautifulSoup
@@ -20,6 +21,7 @@ from bs4 import Tag
 from pydantic import Field
 from pydantic import NonNegativeFloat
 from pydantic import NonNegativeInt
+from pydantic import PositiveFloat
 from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import ValidationInfo
@@ -468,7 +470,7 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
 def scrape_fighter_details(
     select: LinkSelection,
     limit: Optional[int] = None,
-    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+    delay: PositiveFloat = DEFAULT_DELAY,
 ) -> None:
     console.rule("[title]FIGHTER DETAILS", style="title")
 
@@ -543,7 +545,7 @@ if __name__ == "__main__":
         "-f",
         "--filter",
         type=str,
-        choices=["all", "failed", "untried"],
+        choices=get_args(LinkSelection),
         default="untried",
         dest="select",
         help="filter fighters in the database",
