@@ -4,19 +4,20 @@ from json import dump
 from os import mkdir
 from pathlib import Path
 from time import sleep
-from typing import Annotated
 from typing import Any
 from typing import ClassVar
 from typing import Optional
 from typing import cast
+from typing import get_args
 
 import requests
 from bs4 import BeautifulSoup
+from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
+from pydantic import PositiveFloat
 from pydantic import ValidationError
 from pydantic import validate_call
-from pydantic.functional_validators import AfterValidator
 from requests.exceptions import RequestException
 
 from ufcstats_scraper.common import CustomLogger
@@ -28,6 +29,7 @@ from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
+from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import EventLink
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import FightLink
@@ -35,14 +37,13 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
-from ufcstats_scraper.scrapers.validators import fix_consecutive_spaces
 
 logger = CustomLogger("event_details")
 
 
 class Fighter(CustomModel):
     link: FighterLink = Field(..., exclude=True)
-    name: Annotated[str, AfterValidator(fix_consecutive_spaces)]
+    name: CleanName
 
     def __hash__(self) -> int:
         return str(self.link).__hash__()
@@ -72,7 +73,7 @@ class EventDetailsScraper(CustomModel):
     db: LinksDB
 
     soup: Optional[BeautifulSoup] = None
-    rows: Optional[list[Tag]] = None
+    rows: Optional[ResultSet[Tag]] = None
     scraped_data: Optional[list[Fight]] = None
 
     tried: bool = False
@@ -91,7 +92,7 @@ class EventDetailsScraper(CustomModel):
         self.soup = BeautifulSoup(html, "lxml")
         return self.soup
 
-    def get_table_rows(self) -> list[Tag]:
+    def get_table_rows(self) -> ResultSet[Tag]:
         if self.soup is None:
             raise NoSoupError
 
@@ -99,7 +100,7 @@ class EventDetailsScraper(CustomModel):
         if not isinstance(table_body, Tag):
             raise MissingHTMLElementError("Table body (tbody)")
 
-        rows = [r for r in table_body.find_all("tr") if isinstance(r, Tag)]
+        rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
             raise MissingHTMLElementError("Table rows (tr)")
 
@@ -113,14 +114,14 @@ class EventDetailsScraper(CustomModel):
         data_dict["link"] = row.get("data-link")
 
         # Get 2nd column
-        cols = [c for c in row.find_all("td", limit=2) if isinstance(c, Tag)]
+        cols: ResultSet[Tag] = row.find_all("td", limit=2)
         try:
             col = cols[1]
         except IndexError:
             raise MissingHTMLElementError("2nd column (td)") from None
 
         # Scrape fighter links and names
-        anchors = [a for a in col.find_all("a") if isinstance(a, Tag)]
+        anchors: ResultSet[Tag] = col.find_all("a")
         if len(anchors) != 2:
             raise MissingHTMLElementError("Anchor tags (a)")
 
@@ -136,7 +137,7 @@ class EventDetailsScraper(CustomModel):
 
         self.get_soup()
         self.get_table_rows()
-        self.rows = cast(list[Tag], self.rows)
+        self.rows = cast(ResultSet[Tag], self.rows)
 
         scraped_data: list[Fight] = []
         for row in self.rows:
@@ -144,6 +145,7 @@ class EventDetailsScraper(CustomModel):
                 fight = self.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
+                logger.debug(f"Row: {row}")
                 continue
             scraped_data.append(fight)
 
@@ -160,7 +162,7 @@ class EventDetailsScraper(CustomModel):
         try:
             mkdir(EventDetailsScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
-            pass
+            logger.info(f"Directory {EventDetailsScraper.DATA_DIR} already exists")
 
         out_data = [f.to_dict() for f in self.scraped_data]
         file_name = str(self.link).split("/")[-1]
@@ -174,13 +176,12 @@ class EventDetailsScraper(CustomModel):
         if not self.tried:
             logger.info("Event was not updated since no attempt was made to scrape data")
             return
-        self.success = cast(bool, self.success)
         self.db.update_status("event", self.id, self.tried, self.success)
 
-    def db_insert_fights(self) -> None:
+    def db_update_fight_data(self) -> None:
         if self.success:
             self.scraped_data = cast(list[Fight], self.scraped_data)
-            self.db.insert_fights(self.scraped_data)
+            self.db.update_fight_data(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
@@ -251,12 +252,12 @@ def scrape_event(event: DBEvent) -> list[Fight]:
             console.print("Failed!", style="danger", justify="center")
             raise exc
 
-    console.print("Inserting fight data into DB...", justify="center", highlight=False)
+    console.print("Updating fight data...", justify="center", highlight=False)
     try:
-        scraper.db_insert_fights()
+        scraper.db_update_fight_data()
         console.print("Done!", style="success", justify="center")
     except sqlite3.Error as exc:
-        logger.exception("Failed to insert fights into links DB")
+        logger.exception("Failed to update fight data")
         console.print("Failed!", style="danger", justify="center")
         raise exc
 
@@ -267,7 +268,7 @@ def scrape_event(event: DBEvent) -> list[Fight]:
 def scrape_event_details(
     select: LinkSelection,
     limit: Optional[int] = None,
-    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+    delay: PositiveFloat = DEFAULT_DELAY,
 ) -> None:
     console.rule("[title]EVENT DETAILS", style="title")
 
@@ -337,7 +338,7 @@ if __name__ == "__main__":
         "-f",
         "--filter",
         type=str,
-        choices=["all", "failed", "untried"],
+        choices=get_args(LinkSelection),
         default="untried",
         dest="select",
         help="filter events in the database",
