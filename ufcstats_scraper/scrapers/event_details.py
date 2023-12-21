@@ -293,11 +293,13 @@ def scrape_event_details(
 
     with progress:
         task = progress.add_task("Scraping events...", total=num_events)
+        num_fights = 0
         ok_count = 0
 
         for i, event in enumerate(events, start=1):
             try:
-                scrape_event(event)
+                fights = scrape_event(event)
+                num_fights += len(fights)
                 ok_count += 1
             except ScraperError:
                 pass
@@ -321,7 +323,13 @@ def scrape_event_details(
         raise NoScrapedDataError("http://ufcstats.com/event-details/")
 
     count_str = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
-    console.print(f"Successfully scraped data for {count_str}.", style="info", justify="center")
+    console.print(
+        f"Successfully scraped data for {count_str}.",
+        style="info",
+        justify="center",
+        highlight=False,
+    )
+    console.print(f"Scraped data for {num_fights} fights.", style="info", justify="center", highlight=False)
 
 
 if __name__ == "__main__":
