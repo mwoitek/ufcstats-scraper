@@ -1,5 +1,6 @@
 .envrc
 __pycache__/
+data/
 links.sqlite
 log/*.log
 playground.*
