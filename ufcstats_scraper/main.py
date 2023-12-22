@@ -1,11 +1,14 @@
 import argparse
 from sqlite3 import Error as SqliteError
+from typing import get_args
 
 from pydantic import ValidationError
 
 from ufcstats_scraper.common import console
+from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
+from ufcstats_scraper.scrapers.event_details import scrape_event_details
 from ufcstats_scraper.scrapers.events_list import scrape_events_list
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.fighters_list import scrape_fighters_list
@@ -22,7 +25,7 @@ main_parser.add_argument(
     dest="quiet",
     help="suppress output",
 )
-subparsers = main_parser.add_subparsers(title="subcommands")
+subparsers = main_parser.add_subparsers(title="subcommands", required=True)
 
 
 # events-list subcommand
@@ -59,6 +62,50 @@ parser_fighters_list.add_argument(
     help="set delay between requests",
 )
 parser_fighters_list.set_defaults(func=fighters_list)
+
+# Parent parser for "details scrapers"
+parser_details = argparse.ArgumentParser(add_help=False)
+parser_details.add_argument(
+    "-d",
+    "--delay",
+    type=float,
+    default=DEFAULT_DELAY,
+    dest="delay",
+    help="set delay between requests",
+)
+parser_details.add_argument(
+    "-f",
+    "--filter",
+    type=str,
+    choices=get_args(LinkSelection),
+    default="untried",
+    dest="select",
+    help="filter entries in the database",
+)
+parser_details.add_argument(
+    "-l",
+    "--limit",
+    type=int,
+    default=-1,
+    dest="limit",
+    help="limit the number of items to scrape",
+)
+
+
+# event-details subcommand
+def event_details(args: argparse.Namespace) -> None:
+    limit = args.limit if args.limit > 0 else None
+    console.quiet = args.quiet
+    scrape_event_details(args.select, limit, args.delay)
+
+
+parser_event_details = subparsers.add_parser(
+    "event-details",
+    parents=[parser_details],
+    description="Subcommand for scraping event details",
+    help="scrape event details",
+)
+parser_event_details.set_defaults(func=event_details)
 
 # Parse arguments and run subcommand
 args = main_parser.parse_args()
