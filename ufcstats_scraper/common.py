@@ -1,5 +1,4 @@
 import logging
-from os import environ
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +12,8 @@ from rich.progress import Progress
 from rich.progress import TaskProgressColumn
 from rich.progress import TextColumn
 from rich.theme import Theme
+
+import ufcstats_scraper.config as config
 
 custom_theme = Theme(
     {
@@ -41,18 +42,23 @@ class CustomLogger:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
 
+        self.debug = self.logger.debug
+        self.info = self.logger.info
+        self.warning = self.logger.warning
+        self.error = self.logger.error
+        self.critical = self.logger.critical
+        self.exception = self.logger.exception
+
+        if not config.logger_enabled:
+            self.handler = logging.NullHandler()
+            self.logger.addHandler(self.handler)
+            return
+
         if file_name is None:
             file_name = name
         self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log")
 
-        log_level_raw = environ.get("LOG_LEVEL")
-        if log_level_raw is None:
-            log_level = logging.DEBUG
-        else:
-            try:
-                log_level: int = getattr(logging, log_level_raw)
-            except AttributeError:
-                log_level = logging.DEBUG
+        log_level: int = getattr(logging, config.logger_level)
         self.handler.setLevel(log_level)
 
         formatter = logging.Formatter(
@@ -63,16 +69,10 @@ class CustomLogger:
 
         self.logger.addHandler(self.handler)
 
-        self.debug = self.logger.debug
-        self.info = self.logger.info
-        self.warning = self.logger.warning
-        self.error = self.logger.error
-        self.critical = self.logger.critical
-        self.exception = self.logger.exception
-
     def __del__(self) -> None:
         self.logger.removeHandler(self.handler)
-        self.handler.close()
+        if isinstance(self.handler, logging.FileHandler):
+            self.handler.close()
 
 
 class CustomModel(BaseModel):

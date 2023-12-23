@@ -1,0 +1,3 @@
+[logger]
+enabled = false
+level = "DEBUG"
