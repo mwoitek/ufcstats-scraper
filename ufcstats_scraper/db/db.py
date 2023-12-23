@@ -9,6 +9,7 @@ from typing import Union
 
 from pydantic import AnyUrl
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import TABLES
@@ -25,7 +26,10 @@ if TYPE_CHECKING:
     from ufcstats_scraper.scrapers.events_list import Event
     from ufcstats_scraper.scrapers.fighters_list import Fighter as ListFighter
 
-logger = CustomLogger("db")
+logger = CustomLogger(
+    name="db",
+    file_name="ufcstats_scraper" if config.logger_single_file else None,
+)
 
 
 def adapt_url(url: AnyUrl) -> str:

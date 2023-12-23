@@ -20,6 +20,7 @@ from pydantic import computed_field
 from pydantic import model_validator
 from requests.exceptions import RequestException
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
@@ -32,7 +33,10 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 
-logger = CustomLogger("events_list")
+logger = CustomLogger(
+    name="events_list",
+    file_name="ufcstats_scraper" if config.logger_single_file else None,
+)
 
 
 class Location(CustomModel):

@@ -79,7 +79,10 @@ WeightClassType = Literal[
 ]
 CustomTimeDelta = Annotated[timedelta, PlainSerializer(lambda d: int(d.total_seconds()), return_type=int)]
 
-logger = CustomLogger("fight_details")
+logger = CustomLogger(
+    name="fight_details",
+    file_name="ufcstats_scraper" if config.logger_single_file else None,
+)
 
 
 class Result(CustomModel):

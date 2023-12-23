@@ -5,3 +5,4 @@ select = "untried"
 [logger]
 enabled = false
 level = "DEBUG"
+single_file = false

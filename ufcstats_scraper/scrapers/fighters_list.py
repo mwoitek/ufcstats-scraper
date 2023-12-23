@@ -44,7 +44,10 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 
-logger = CustomLogger("fighters_list")
+logger = CustomLogger(
+    name="fighters_list",
+    file_name="ufcstats_scraper" if config.logger_single_file else None,
+)
 
 
 class Fighter(CustomModel):

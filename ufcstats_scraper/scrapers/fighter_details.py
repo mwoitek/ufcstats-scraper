@@ -52,7 +52,10 @@ from ufcstats_scraper.scrapers.exceptions import ScraperError
 PercStr = Annotated[str, Field(pattern=r"\d+%")]
 PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
 
-logger = CustomLogger("fighter_details")
+logger = CustomLogger(
+    name="fighter_details",
+    file_name="ufcstats_scraper" if config.logger_single_file else None,
+)
 
 
 def to_snake_case(s: str) -> str:
