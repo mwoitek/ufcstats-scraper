@@ -34,6 +34,7 @@ from pydantic import validate_call
 from pydantic.functional_serializers import PlainSerializer
 from requests.exceptions import RequestException
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
@@ -42,7 +43,6 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
-from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FightLink
 from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
@@ -633,7 +633,7 @@ def scrape_fight(fight: DBFight) -> Fight:
 def scrape_fight_details(
     select: LinkSelection,
     limit: Optional[int] = None,
-    delay: Annotated[float, Field(gt=0.0)] = DEFAULT_DELAY,
+    delay: Annotated[float, Field(gt=0.0)] = config.default_delay,
 ) -> None:
     console.rule("[title]FIGHT DETAILS", style="title")
 
@@ -700,7 +700,7 @@ if __name__ == "__main__":
         "-d",
         "--delay",
         type=float,
-        default=DEFAULT_DELAY,
+        default=config.default_delay,
         dest="delay",
         help="set delay between requests",
     )
@@ -708,8 +708,8 @@ if __name__ == "__main__":
         "-f",
         "--filter",
         type=str,
-        choices=["all", "failed", "untried"],
-        default="untried",
+        choices=get_args(LinkSelection),
+        default=config.default_select,
         dest="select",
         help="filter fights in the database",
     )

@@ -29,13 +29,13 @@ from pydantic import model_validator
 from pydantic import validate_call
 from requests.exceptions import RequestException
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
 from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FighterLink
 from ufcstats_scraper.scrapers.common import Stance
@@ -308,7 +308,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
 
 
 @validate_call
-def scrape_fighters_list(delay: PositiveFloat = DEFAULT_DELAY) -> None:
+def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
     console.rule("[title]FIGHTERS LIST", style="title")
 
     all_fighters: list[Fighter] = []
@@ -373,7 +373,7 @@ if __name__ == "__main__":
         "-d",
         "--delay",
         type=float,
-        default=DEFAULT_DELAY,
+        default=config.default_delay,
         dest="delay",
         help="set delay between requests",
     )

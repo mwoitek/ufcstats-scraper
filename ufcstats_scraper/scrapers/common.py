@@ -8,8 +8,6 @@ from pydantic import HttpUrl
 from pydantic.functional_serializers import PlainSerializer
 from pydantic.functional_validators import AfterValidator
 
-DEFAULT_DELAY = 1.0
-
 
 def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl], HttpUrl]:
     def validator(link: HttpUrl) -> HttpUrl:

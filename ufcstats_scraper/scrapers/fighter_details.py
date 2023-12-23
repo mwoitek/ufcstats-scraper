@@ -30,6 +30,7 @@ from pydantic import model_validator
 from pydantic import validate_call
 from requests.exceptions import RequestException
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import console
@@ -38,7 +39,6 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFighter
-from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
@@ -470,7 +470,7 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
 def scrape_fighter_details(
     select: LinkSelection,
     limit: Optional[int] = None,
-    delay: PositiveFloat = DEFAULT_DELAY,
+    delay: PositiveFloat = config.default_delay,
 ) -> None:
     console.rule("[title]FIGHTER DETAILS", style="title")
 
@@ -537,7 +537,7 @@ if __name__ == "__main__":
         "-d",
         "--delay",
         type=float,
-        default=DEFAULT_DELAY,
+        default=config.default_delay,
         dest="delay",
         help="set delay between requests",
     )
@@ -546,7 +546,7 @@ if __name__ == "__main__":
         "--filter",
         type=str,
         choices=get_args(LinkSelection),
-        default="untried",
+        default=config.default_select,
         dest="select",
         help="filter fighters in the database",
     )

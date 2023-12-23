@@ -4,10 +4,10 @@ from typing import get_args
 
 from pydantic import ValidationError
 
+import ufcstats_scraper.config as config
 from ufcstats_scraper.common import console
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.event_details import scrape_event_details
 from ufcstats_scraper.scrapers.events_list import scrape_events_list
 from ufcstats_scraper.scrapers.exceptions import ScraperError
@@ -58,7 +58,7 @@ parser_fighters_list.add_argument(
     "-d",
     "--delay",
     type=float,
-    default=DEFAULT_DELAY,
+    default=config.default_delay,
     dest="delay",
     help="set delay between requests",
 )
@@ -70,7 +70,7 @@ parser_details.add_argument(
     "-d",
     "--delay",
     type=float,
-    default=DEFAULT_DELAY,
+    default=config.default_delay,
     dest="delay",
     help="set delay between requests",
 )
@@ -79,7 +79,7 @@ parser_details.add_argument(
     "--filter",
     type=str,
     choices=get_args(LinkSelection),
-    default="untried",
+    default=config.default_select,
     dest="select",
     help="filter entries in the database",
 )
