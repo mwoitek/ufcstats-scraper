@@ -11,6 +11,7 @@ from ufcstats_scraper.scrapers.common import DEFAULT_DELAY
 from ufcstats_scraper.scrapers.event_details import scrape_event_details
 from ufcstats_scraper.scrapers.events_list import scrape_events_list
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.fighter_details import scrape_fighter_details
 from ufcstats_scraper.scrapers.fighters_list import scrape_fighters_list
 
 # Main argument parser
@@ -106,6 +107,22 @@ parser_event_details = subparsers.add_parser(
     help="scrape event details",
 )
 parser_event_details.set_defaults(func=event_details)
+
+
+# fighter-details subcommand
+def fighter_details(args: argparse.Namespace) -> None:
+    limit = args.limit if args.limit > 0 else None
+    console.quiet = args.quiet
+    scrape_fighter_details(args.select, limit, args.delay)
+
+
+parser_fighter_details = subparsers.add_parser(
+    "fighter-details",
+    parents=[parser_details],
+    description="Subcommand for scraping fighter details",
+    help="scrape fighter details",
+)
+parser_fighter_details.set_defaults(func=fighter_details)
 
 # Parse arguments and run subcommand
 args = main_parser.parse_args()
