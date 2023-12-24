@@ -15,29 +15,19 @@ from rich.theme import Theme
 
 import ufcstats_scraper.config as config
 
-custom_theme = Theme(
-    {
-        "title": "bold bright_yellow",
-        "subtitle": "bold purple",
-        "danger": "bold bright_red",
-        "info": "bright_blue",
-        "success": "bold bright_green",
-    }
-)
-console = Console(theme=custom_theme)
-progress = Progress(
-    TextColumn("[progress.description]{task.description}"),
-    BarColumn(bar_width=None, complete_style="bright_green"),
-    MofNCompleteColumn(),
-    TaskProgressColumn(),
-    console=console,
-    transient=True,
-)
-
 
 class CustomConsole:
     def __init__(self) -> None:
-        self.console = console
+        custom_theme = Theme(
+            {
+                "title": "bold bright_yellow",
+                "subtitle": "bold purple",
+                "danger": "bold bright_red",
+                "info": "bright_blue",
+                "success": "bold bright_green",
+            }
+        )
+        self.console = Console(theme=custom_theme, width=100)
         self.print_exception = self.console.print_exception
 
     def title(self, text: str) -> None:
@@ -47,35 +37,16 @@ class CustomConsole:
         self.console.rule(f"[subtitle]{text}", style="subtitle")
 
     def print(self, text: str) -> None:
-        self.console.print(
-            text,
-            justify="center",
-            highlight=False,
-        )
+        self.console.print(text, justify="center", highlight=False)
 
     def danger(self, text: str) -> None:
-        self.console.print(
-            text,
-            style="danger",
-            justify="center",
-            highlight=False,
-        )
+        self.console.print(text, style="danger", justify="center", highlight=False)
 
     def info(self, text: str) -> None:
-        self.console.print(
-            text,
-            style="info",
-            justify="center",
-            highlight=False,
-        )
+        self.console.print(text, style="info", justify="center", highlight=False)
 
     def success(self, text: str) -> None:
-        self.console.print(
-            text,
-            style="success",
-            justify="center",
-            highlight=False,
-        )
+        self.console.print(text, style="success", justify="center", highlight=False)
 
     def _set_quiet(self, quiet: bool) -> None:
         self.console.quiet = quiet
@@ -84,6 +55,15 @@ class CustomConsole:
 
 
 custom_console = CustomConsole()
+progress = Progress(
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(bar_width=None, complete_style="bright_green"),
+    MofNCompleteColumn(),
+    TaskProgressColumn(),
+    console=custom_console.console,
+    refresh_per_second=1.0,
+    transient=True,
+)
 
 LOG_DIR = Path(__file__).resolve().parents[1] / "log"
 
