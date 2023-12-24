@@ -34,6 +34,57 @@ progress = Progress(
     transient=True,
 )
 
+
+class CustomConsole:
+    def __init__(self) -> None:
+        self.console = console
+        self.print_exception = self.console.print_exception
+
+    def title(self, text: str) -> None:
+        self.console.rule(f"[title]{text}", style="title")
+
+    def subtitle(self, text: str) -> None:
+        self.console.rule(f"[subtitle]{text}", style="subtitle")
+
+    def print(self, text: str) -> None:
+        self.console.print(
+            text,
+            justify="center",
+            highlight=False,
+        )
+
+    def danger(self, text: str) -> None:
+        self.console.print(
+            text,
+            style="danger",
+            justify="center",
+            highlight=False,
+        )
+
+    def info(self, text: str) -> None:
+        self.console.print(
+            text,
+            style="info",
+            justify="center",
+            highlight=False,
+        )
+
+    def success(self, text: str) -> None:
+        self.console.print(
+            text,
+            style="success",
+            justify="center",
+            highlight=False,
+        )
+
+    def _set_quiet(self, quiet: bool) -> None:
+        self.console.quiet = quiet
+
+    quiet = property(fset=_set_quiet)
+
+
+custom_console = CustomConsole()
+
 LOG_DIR = Path(__file__).resolve().parents[1] / "log"
 
 
