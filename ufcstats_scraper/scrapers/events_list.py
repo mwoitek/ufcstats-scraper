@@ -23,7 +23,7 @@ from requests.exceptions import RequestException
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
-from ufcstats_scraper.common import console
+from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import CustomDate
@@ -180,48 +180,43 @@ class EventsListScraper:
 
 
 def scrape_events_list() -> None:
-    console.rule("[title]EVENTS LIST", style="title")
-    console.print("Scraping events list...", justify="center", highlight=False)
+    console.title("EVENTS LIST")
+    console.print("Scraping events list...")
 
     try:
         db = LinksDB()
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     scraper = EventsListScraper(db)
     try:
         scraper.scrape()
-        console.print("Done!", style="success", justify="center")
-        console.print(
-            f"Scraped data for {len(scraper.scraped_data)} events.",
-            style="success",
-            justify="center",
-            highlight=False,
-        )
+        console.success("Done!")
+        console.success(f"Scraped data for {len(scraper.scraped_data)} events.")
     except ScraperError as exc:
         logger.exception("Failed to scrape events list")
-        console.print("Failed!", style="danger", justify="center")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("Failed!")
+        console.danger("No data was scraped.")
         raise exc
 
-    console.print("Saving scraped data...", justify="center", highlight=False)
+    console.print("Saving scraped data...")
     try:
         scraper.save_json()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except (OSError, ValueError) as exc:
         logger.exception("Failed to save data to JSON")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
-    console.print("Inserting event data into DB...", justify="center", highlight=False)
+    console.print("Inserting event data into DB...")
     try:
         scraper.db_insert_events()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except sqlite3.Error as exc:
         logger.exception("Failed to insert event data into DB")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
 

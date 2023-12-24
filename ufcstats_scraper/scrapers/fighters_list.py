@@ -32,7 +32,7 @@ from requests.exceptions import RequestException
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
-from ufcstats_scraper.common import console
+from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -261,50 +261,45 @@ class FightersListScraper(CustomModel):
 
 def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fighter]:
     letter_upper = letter.upper()
-    console.rule(f"[subtitle]{letter_upper}", style="subtitle")
-    console.print(f"Scraping fighter data for letter {letter_upper}...", justify="center", highlight=False)
+    console.subtitle(letter_upper)
+    console.print(f"Scraping fighter data for letter {letter_upper}...")
 
     try:
         db = LinksDB()
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     scraper = FightersListScraper(letter=letter, db=db)
     try:
         scraper.scrape()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except ScraperError as exc:
         logger.exception(f"Failed to scrape data for {letter_upper}")
-        console.print("Failed!", style="danger", justify="center")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("Failed!")
+        console.danger("No data was scraped.")
         raise exc
 
     fighters = cast(list[Fighter], scraper.scraped_data)
-    console.print(
-        f"Scraped data for {len(fighters)} fighters.",
-        style="success",
-        justify="center",
-        highlight=False,
-    )
+    console.success(f"Scraped data for {len(fighters)} fighters.")
 
-    console.print("Saving scraped data...", justify="center", highlight=False)
+    console.print("Saving scraped data...")
     try:
         scraper.save_json()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except OSError as exc:
         logger.exception(f"Failed to save data to JSON for {letter_upper}")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
-    console.print("Inserting fighter data into DB...", justify="center", highlight=False)
+    console.print("Inserting fighter data into DB...")
     try:
         scraper.db_insert_fighters()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except sqlite3.Error as exc:
         logger.exception("Failed to insert fighter data into DB")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     return fighters
@@ -312,7 +307,7 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
 
 @validate_call
 def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
-    console.rule("[title]FIGHTERS LIST", style="title")
+    console.title("FIGHTERS LIST")
 
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
@@ -331,42 +326,32 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
             progress.update(task, advance=1)
 
             if i < 26:
-                console.print(
-                    f"Continuing in {delay} second(s)...",
-                    style="info",
-                    justify="center",
-                    highlight=False,
-                )
+                console.info(f"Continuing in {delay} second(s)...")
                 sleep(delay)
 
-    console.rule("[subtitle]ALL LETTERS", style="subtitle")
+    console.subtitle("ALL LETTERS")
 
     num_fighters = len(all_fighters)
     if num_fighters == 0:
         logger.error("Failed to scrape data for all letters")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("No data was scraped.")
         raise NoScrapedDataError(FightersListScraper.BASE_URL)
 
     letters_str = "all letters" if len(ok_letters) == 26 else "letters " + ", ".join(ok_letters)
-    console.print(f"Successfully scraped data for {letters_str}.", style="info", justify="center")
-    console.print(
-        f"Scraped data for {num_fighters} fighters.",
-        style="info",
-        justify="center",
-        highlight=False,
-    )
+    console.info(f"Successfully scraped data for {letters_str}.")
+    console.info(f"Scraped data for {num_fighters} fighters.")
 
-    console.print("Saving combined data...", justify="center", highlight=False)
+    console.print("Saving combined data...")
     out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in all_fighters]
     out_file = FightersListScraper.DATA_DIR / "combined.json"
 
     try:
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except OSError as exc:
         logger.exception("Failed to save combined data to JSON")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
 

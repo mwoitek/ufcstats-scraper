@@ -5,7 +5,7 @@ from typing import get_args
 from pydantic import ValidationError
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import console
+from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.event_details import scrape_event_details

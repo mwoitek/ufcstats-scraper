@@ -23,7 +23,7 @@ from requests.exceptions import RequestException
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
-from ufcstats_scraper.common import console
+from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
@@ -190,14 +190,14 @@ class EventDetailsScraper(CustomModel):
 
 
 def scrape_event(event: DBEvent) -> list[Fight]:
-    console.rule(f"[subtitle]{event.name.upper()}", style="subtitle")
-    console.print(f"Scraping page for [b]{event.name}[/b]...", justify="center", highlight=False)
+    console.subtitle(event.name.upper())
+    console.print(f"Scraping page for [b]{event.name}[/b]...")
 
     try:
         db = LinksDB()
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     data_dict = dict(db=db, **event._asdict())
@@ -206,62 +206,57 @@ def scrape_event(event: DBEvent) -> list[Fight]:
     except ValidationError as exc:
         logger.exception("Failed to create scraper object")
         logger.debug(f"Scraper args: {data_dict}")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     try:
         scraper.scrape()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except ScraperError as exc_1:
         logger.exception("Failed to scrape event details")
         logger.debug(f"Event: {event}")
-        console.print("Failed!", style="danger", justify="center")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("Failed!")
+        console.danger("No data was scraped.")
 
-        console.print("Updating event status...", justify="center", highlight=False)
+        console.print("Updating event status...")
         try:
             scraper.db_update_event()
-            console.print("Done!", style="success", justify="center")
+            console.success("Done!")
         except sqlite3.Error as exc_2:
             logger.exception("Failed to update event status")
-            console.print("Failed!", style="danger", justify="center")
+            console.danger("Failed!")
             raise exc_2
 
         raise exc_1
 
     fights = cast(list[Fight], scraper.scraped_data)
-    console.print(
-        f"Scraped data for {len(fights)} fights.",
-        style="success",
-        justify="center",
-        highlight=False,
-    )
+    console.success(f"Scraped data for {len(fights)} fights.")
 
-    console.print("Saving scraped data...", justify="center", highlight=False)
+    console.print("Saving scraped data...")
     try:
         scraper.save_json()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except OSError as exc:
         logger.exception("Failed to save data to JSON")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
     finally:
-        console.print("Updating event status...", justify="center", highlight=False)
+        console.print("Updating event status...")
         try:
             scraper.db_update_event()
-            console.print("Done!", style="success", justify="center")
+            console.success("Done!")
         except sqlite3.Error as exc:
             logger.exception("Failed to update event status")
-            console.print("Failed!", style="danger", justify="center")
+            console.danger("Failed!")
             raise exc
 
-    console.print("Updating fight data...", justify="center", highlight=False)
+    console.print("Updating fight data...")
     try:
         scraper.db_update_fight_data()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except sqlite3.Error as exc:
         logger.exception("Failed to update fight data")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     return fights
@@ -273,26 +268,26 @@ def scrape_event_details(
     limit: Optional[int] = None,
     delay: PositiveFloat = config.default_delay,
 ) -> None:
-    console.rule("[title]EVENT DETAILS", style="title")
+    console.title("EVENT DETAILS")
 
-    console.rule("[subtitle]EVENT LINKS", style="subtitle")
-    console.print("Retrieving event links...", justify="center", highlight=False)
+    console.subtitle("EVENT LINKS")
+    console.print("Retrieving event links...")
 
     events: list[DBEvent] = []
     try:
         with LinksDB() as db:
             events.extend(db.read_events(select, limit))
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to read events from DB")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     num_events = len(events)
     if num_events == 0:
-        console.print("No event to scrape.", style="info", justify="center")
+        console.info("No event to scrape.")
         return
-    console.print(f"Got {num_events} event(s) to scrape.", style="success", justify="center", highlight=False)
+    console.success(f"Got {num_events} event(s) to scrape.")
 
     with progress:
         task = progress.add_task("Scraping events...", total=num_events)
@@ -310,29 +305,19 @@ def scrape_event_details(
             progress.update(task, advance=1)
 
             if i < num_events:
-                console.print(
-                    f"Continuing in {delay} second(s)...",
-                    style="info",
-                    justify="center",
-                    highlight=False,
-                )
+                console.info(f"Continuing in {delay} second(s)...")
                 sleep(delay)
 
-    console.rule("[subtitle]SUMMARY", style="subtitle")
+    console.subtitle("SUMMARY")
 
     if ok_count == 0:
         logger.error("Failed to scrape data for all events")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("No data was scraped.")
         raise NoScrapedDataError("http://ufcstats.com/event-details/")
 
     count_str = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
-    console.print(
-        f"Successfully scraped data for {count_str}.",
-        style="info",
-        justify="center",
-        highlight=False,
-    )
-    console.print(f"Scraped data for {num_fights} fights.", style="info", justify="center", highlight=False)
+    console.info(f"Successfully scraped data for {count_str}.")
+    console.info(f"Scraped data for {num_fights} fights.")
 
 
 if __name__ == "__main__":

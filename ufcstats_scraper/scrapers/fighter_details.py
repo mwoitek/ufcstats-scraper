@@ -33,7 +33,7 @@ from requests.exceptions import RequestException
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
-from ufcstats_scraper.common import console
+from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
@@ -408,14 +408,14 @@ class FighterDetailsScraper(CustomModel):
 
 
 def scrape_fighter(fighter: DBFighter) -> Fighter:
-    console.rule(f"[subtitle]{fighter.name.upper()}", style="subtitle")
-    console.print(f"Scraping page for [b]{fighter.name}[/b]...", justify="center", highlight=False)
+    console.subtitle(fighter.name.upper())
+    console.print(f"Scraping page for [b]{fighter.name}[/b]...")
 
     try:
         db = LinksDB()
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to create DB object")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     data_dict = dict(db=db, **fighter._asdict())
@@ -424,45 +424,45 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
     except ValidationError as exc:
         logger.exception("Failed to create scraper object")
         logger.debug(f"Scraper args: {data_dict}")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     try:
         scraper.scrape()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except ScraperError as exc_1:
         logger.exception("Failed to scrape fighter details")
         logger.debug(f"Fighter: {fighter}")
-        console.print("Failed!", style="danger", justify="center")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("Failed!")
+        console.danger("No data was scraped.")
 
-        console.print("Updating fighter status...", justify="center", highlight=False)
+        console.print("Updating fighter status...")
         try:
             scraper.db_update_fighter()
-            console.print("Done!", style="success", justify="center")
+            console.success("Done!")
         except sqlite3.Error as exc_2:
             logger.exception("Failed to update fighter status")
-            console.print("Failed!", style="danger", justify="center")
+            console.danger("Failed!")
             raise exc_2
 
         raise exc_1
 
-    console.print("Saving scraped data...", justify="center", highlight=False)
+    console.print("Saving scraped data...")
     try:
         scraper.save_json()
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except OSError as exc:
         logger.exception("Failed to save data to JSON")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
     finally:
-        console.print("Updating fighter status...", justify="center", highlight=False)
+        console.print("Updating fighter status...")
         try:
             scraper.db_update_fighter()
-            console.print("Done!", style="success", justify="center")
+            console.success("Done!")
         except sqlite3.Error as exc:
             logger.exception("Failed to update fighter status")
-            console.print("Failed!", style="danger", justify="center")
+            console.danger("Failed!")
             raise exc
 
     scraper.scraped_data = cast(Fighter, scraper.scraped_data)
@@ -475,31 +475,26 @@ def scrape_fighter_details(
     limit: Optional[int] = None,
     delay: PositiveFloat = config.default_delay,
 ) -> None:
-    console.rule("[title]FIGHTER DETAILS", style="title")
+    console.title("FIGHTER DETAILS")
 
-    console.rule("[subtitle]FIGHTER LINKS", style="subtitle")
-    console.print("Retrieving fighter links...", justify="center", highlight=False)
+    console.subtitle("FIGHTER LINKS")
+    console.print("Retrieving fighter links...")
 
     fighters: list[DBFighter] = []
     try:
         with LinksDB() as db:
             fighters.extend(db.read_fighters(select, limit))
-        console.print("Done!", style="success", justify="center")
+        console.success("Done!")
     except (DBNotSetupError, sqlite3.Error) as exc:
         logger.exception("Failed to read fighters from DB")
-        console.print("Failed!", style="danger", justify="center")
+        console.danger("Failed!")
         raise exc
 
     num_fighters = len(fighters)
     if num_fighters == 0:
-        console.print("No fighter to scrape.", style="info", justify="center")
+        console.info("No fighter to scrape.")
         return
-    console.print(
-        f"Got {num_fighters} fighter(s) to scrape.",
-        style="success",
-        justify="center",
-        highlight=False,
-    )
+    console.success(f"Got {num_fighters} fighter(s) to scrape.")
 
     with progress:
         task = progress.add_task("Scraping fighters...", total=num_fighters)
@@ -515,23 +510,18 @@ def scrape_fighter_details(
             progress.update(task, advance=1)
 
             if i < num_fighters:
-                console.print(
-                    f"Continuing in {delay} second(s)...",
-                    style="info",
-                    justify="center",
-                    highlight=False,
-                )
+                console.info(f"Continuing in {delay} second(s)...")
                 sleep(delay)
 
-    console.rule("[subtitle]SUMMARY", style="subtitle")
+    console.subtitle("SUMMARY")
 
     if ok_count == 0:
         logger.error("Failed to scrape data for all fighters")
-        console.print("No data was scraped.", style="danger", justify="center")
+        console.danger("No data was scraped.")
         raise NoScrapedDataError("http://ufcstats.com/fighter-details/")
 
     count_str = "all fighters" if num_fighters == ok_count else f"{ok_count} out of {num_fighters} fighter(s)"
-    console.print(f"Successfully scraped data for {count_str}.", style="info", justify="center")
+    console.info(f"Successfully scraped data for {count_str}.")
 
 
 if __name__ == "__main__":
