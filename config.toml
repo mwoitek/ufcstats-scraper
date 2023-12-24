@@ -1,0 +1,6 @@
+[defaults]
+delay = 2.5
+
+[logger]
+enabled = true
+level = "DEBUG"

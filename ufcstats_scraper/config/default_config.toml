@@ -1,8 +1,0 @@
-[defaults]
-delay = 1.0
-select = "untried"
-
-[logger]
-enabled = false
-level = "DEBUG"
-single_file = false
