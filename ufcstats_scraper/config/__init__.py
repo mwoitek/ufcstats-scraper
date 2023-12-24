@@ -37,6 +37,13 @@ class Defaults(BaseModel):
     _fix_invalid = field_validator("*", mode="wrap")(fix_invalid)
 
 
+class Directories(BaseModel):
+    data: Path = Path.cwd() / "data"
+    log: Path = Path.cwd() / "log"
+
+    _fix_invalid = field_validator("*", mode="wrap")(fix_invalid)
+
+
 class Logger(BaseModel):
     enabled: bool = False
     level: LevelType = "DEBUG"
@@ -47,6 +54,7 @@ class Logger(BaseModel):
 
 class Config(BaseModel):
     defaults: Defaults = Defaults()
+    directories: Directories = Directories()
     logger: Logger = Logger()
 
 
@@ -65,6 +73,10 @@ _config = Config.model_validate(_raw_config, context=Config().model_dump())
 # Default values
 default_delay = _config.defaults.delay
 default_select = _config.defaults.select
+
+# Directories
+data_dir = _config.directories.data
+log_dir = _config.directories.log
 
 # Logger config
 logger_enabled = _config.logger.enabled

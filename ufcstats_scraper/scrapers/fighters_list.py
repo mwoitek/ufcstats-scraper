@@ -139,7 +139,7 @@ class Fighter(CustomModel):
 
 class FightersListScraper(CustomModel):
     BASE_URL: ClassVar[str] = "http://www.ufcstats.com/statistics/fighters"
-    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighters_list"
+    DATA_DIR: ClassVar[Path] = config.data_dir / "fighters_list"
 
     letter: Annotated[str, Field(pattern=r"[a-z]{1}")]
     db: LinksDB

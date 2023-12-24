@@ -256,7 +256,7 @@ class Fighter(CustomModel):
 
 
 class FighterDetailsScraper(CustomModel):
-    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "fighter_details"
+    DATA_DIR: ClassVar[Path] = config.data_dir / "fighter_details"
 
     id: int
     link: FighterLink

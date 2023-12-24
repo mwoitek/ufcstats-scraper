@@ -11,7 +11,6 @@ from pydantic import AnyUrl
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.common import TableName
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
     from ufcstats_scraper.scrapers.events_list import Event
     from ufcstats_scraper.scrapers.fighters_list import Fighter as ListFighter
 
+DB_PATH = config.data_dir / "links.sqlite"
 logger = CustomLogger(
     name="db",
     file_name="ufcstats_scraper" if config.logger_single_file else None,

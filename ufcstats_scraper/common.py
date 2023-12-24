@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
@@ -65,8 +64,6 @@ progress = Progress(
     transient=True,
 )
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "log"
-
 
 class CustomLogger:
     def __init__(self, name: str, file_name: Optional[str] = None) -> None:
@@ -87,7 +84,7 @@ class CustomLogger:
 
         if file_name is None:
             file_name = name
-        self.handler = logging.FileHandler(LOG_DIR / f"{file_name}.log")
+        self.handler = logging.FileHandler(config.log_dir / f"{file_name}.log")
 
         log_level: int = getattr(logging, config.logger_level)
         self.handler.setLevel(log_level)

@@ -68,7 +68,7 @@ class Fight(CustomModel):
 
 
 class EventDetailsScraper(CustomModel):
-    DATA_DIR: ClassVar[Path] = Path(__file__).resolve().parents[2] / "data" / "event_details"
+    DATA_DIR: ClassVar[Path] = config.data_dir / "event_details"
 
     id: int
     link: EventLink

@@ -1,6 +1,10 @@
 [defaults]
 delay = 2.5
 
+[directories]
+data = "/home/woitek/repos/mma_project/ufcstats_scraper/data"
+log = "/home/woitek/repos/mma_project/ufcstats_scraper/log"
+
 [logger]
 enabled = true
 level = "DEBUG"

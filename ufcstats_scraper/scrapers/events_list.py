@@ -4,7 +4,6 @@ import sqlite3
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
-from pathlib import Path
 from typing import Any
 from typing import Optional
 from typing import Self
@@ -76,7 +75,7 @@ class Event(CustomModel):
 
 class EventsListScraper:
     BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
-    DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "events_list"
+    DATA_DIR = config.data_dir / "events_list"
 
     def __init__(self, db: LinksDB) -> None:
         self.db = db
