@@ -6,8 +6,10 @@ from typing import Any
 from typing import Optional
 from typing import Self
 from typing import Union
+from typing import cast
 
 from pydantic import AnyUrl
+from pydantic import PositiveInt
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from ufcstats_scraper.scrapers.fighters_list import Fighter as ListFighter
 
 DB_PATH = config.data_dir / "links.sqlite"
+default_select = cast(LinkSelection, config.default_select)
 logger = CustomLogger(
     name="db",
     file_name="ufcstats_scraper" if config.logger_single_file else None,
@@ -125,8 +128,9 @@ class LinksDB:
     def build_read_query(
         table: TableName,
         extra_cols: Union[str, list[str]],
-        select: LinkSelection = "untried",
-        limit: Optional[int] = None,
+        select: LinkSelection = default_select,
+        reverse: bool = False,
+        limit: Optional[PositiveInt] = None,
     ) -> str:
         cols = ["id", "link"]
         if isinstance(extra_cols, str):
@@ -144,22 +148,37 @@ class LinksDB:
             case "all":
                 pass
 
+        if reverse:
+            query = f"{query} ORDER BY id DESC"
+
         if isinstance(limit, int):
             query = f"{query} LIMIT {limit}"
 
         logger.debug(f"Built read query: {query}")
         return query
 
-    def read_events(self, select: LinkSelection = "untried", limit: Optional[int] = None) -> list[DBEvent]:
-        query = LinksDB.build_read_query(table="event", extra_cols="name", select=select, limit=limit)
+    def read_events(
+        self,
+        select: LinkSelection = default_select,
+        limit: Optional[PositiveInt] = None,
+    ) -> list[DBEvent]:
+        # The most recent events are added to the DB first. But I want to
+        # scrape the data in reverse order.
+        query = LinksDB.build_read_query(
+            table="event",
+            extra_cols="name",
+            select=select,
+            reverse=True,
+            limit=limit,
+        )
         events = [DBEvent(*row) for row in self.cur.execute(query)]
         logger.info(f"Read {len(events)} events from DB")
         return events
 
     def read_fighters(
         self,
-        select: LinkSelection = "untried",
-        limit: Optional[int] = None,
+        select: LinkSelection = default_select,
+        limit: Optional[PositiveInt] = None,
     ) -> list[DBFighter]:
         query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select, limit=limit)
         fighters = [DBFighter(*row) for row in self.cur.execute(query)]
@@ -178,9 +197,11 @@ class LinksDB:
 
     def read_fights(
         self,
-        select: LinkSelection = "untried",
-        limit: Optional[int] = None,
+        select: LinkSelection = default_select,
+        limit: Optional[PositiveInt] = None,
     ) -> list[DBFight]:
+        # The most recent fights are added to the DB first. But I want to
+        # scrape the data in reverse order.
         query = """
         SELECT
           fight.id,
@@ -195,6 +216,7 @@ class LinksDB:
           ON fight.fighter_1_id = f1.id
         INNER JOIN fighter AS f2
           ON fight.fighter_2_id = f2.id
+        ORDER BY fight.id DESC
         """
 
         match select:
