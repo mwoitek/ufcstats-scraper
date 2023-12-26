@@ -1,13 +1,11 @@
 import sqlite3
-from pathlib import Path
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
+from ufcstats_scraper.db.common import DB_PATH
+from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
 from ufcstats_scraper.db.common import TableName
-
-DB_PATH = config.data_dir / "links.sqlite"
-SQL_SCRIPTS_DIR = Path(__file__).resolve().parent / "sql_scripts"
 
 logger = CustomLogger(
     name="db_checks",

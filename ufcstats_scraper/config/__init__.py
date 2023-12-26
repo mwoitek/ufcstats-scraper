@@ -12,7 +12,9 @@ from pydantic import ValidationInfo
 from pydantic import ValidatorFunctionWrapHandler
 from pydantic import field_validator
 
-from ufcstats_scraper.db.common import LinkSelection
+# NOTE: Instead of importing, I'm repeating this definition. The goal is to
+# avoid problems with circular imports.
+LinkSelection = Literal["all", "failed", "untried"]
 
 LevelType = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
