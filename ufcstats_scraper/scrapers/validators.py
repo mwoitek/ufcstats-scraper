@@ -37,3 +37,18 @@ def fill_weight(weight: Optional[PositiveInt], info: ValidationInfo) -> Optional
 
     weight = int(match.group(1))
     return weight
+
+
+def fill_reach(reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+    if reach is not None:
+        return reach
+
+    reach_str = info.data.get("reach_str")
+    if not isinstance(reach_str, str):
+        return
+
+    match = re.match(r"(\d+)([.]0)?\"", reach_str)
+    match = cast(re.Match, match)
+
+    reach = int(match.group(1))
+    return reach

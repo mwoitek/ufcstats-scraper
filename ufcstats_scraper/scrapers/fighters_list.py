@@ -1,4 +1,3 @@
-import re
 import sqlite3
 from argparse import ArgumentParser
 from json import dump
@@ -23,7 +22,6 @@ from pydantic import NonNegativeInt
 from pydantic import PositiveFloat
 from pydantic import PositiveInt
 from pydantic import ValidationError
-from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic import validate_call
@@ -44,6 +42,7 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fill_height
+from ufcstats_scraper.scrapers.validators import fill_reach
 from ufcstats_scraper.scrapers.validators import fill_weight
 
 logger = CustomLogger(
@@ -73,6 +72,7 @@ class Fighter(CustomModel):
 
     _fill_height = field_validator("height")(fill_height)
     _fill_weight = field_validator("weight")(fill_weight)
+    _fill_reach = field_validator("reach")(fill_reach)
 
     @property
     def name(self) -> str:
@@ -89,22 +89,6 @@ class Fighter(CustomModel):
         if self.name == "":
             raise ValueError("fighter has no name")
         return self
-
-    @field_validator("reach")
-    @classmethod
-    def fill_reach(cls, reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if reach is not None:
-            return reach
-
-        reach_str = info.data.get("reach_str")
-        if not isinstance(reach_str, str):
-            return
-
-        match = re.match(r"(\d+)[.]0\"", reach_str)
-        match = cast(re.Match, match)
-
-        reach = int(match.group(1))
-        return reach
 
 
 class FightersListScraper(CustomModel):

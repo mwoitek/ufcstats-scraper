@@ -51,6 +51,7 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fill_height
+from ufcstats_scraper.scrapers.validators import fill_reach
 from ufcstats_scraper.scrapers.validators import fill_weight
 
 PercStr = Annotated[str, Field(pattern=r"\d+%")]
@@ -106,22 +107,7 @@ class PersonalInfo(CustomModel):
 
     _fill_height = field_validator("height")(fill_height)
     _fill_weight = field_validator("weight")(fill_weight)
-
-    @field_validator("reach")
-    @classmethod
-    def fill_reach(cls, reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if reach is not None:
-            return reach
-
-        reach_str = info.data.get("reach_str")
-        if not isinstance(reach_str, str):
-            return
-
-        match = re.match(r"(\d+)\"", reach_str)
-        match = cast(re.Match, match)
-
-        reach = int(match.group(1))
-        return reach
+    _fill_reach = field_validator("reach")(fill_reach)
 
     @field_validator("date_of_birth")
     @classmethod
