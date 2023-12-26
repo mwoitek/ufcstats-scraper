@@ -13,7 +13,7 @@ from pydantic import PositiveInt
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.db.common import TABLES
+from ufcstats_scraper.db.checks import is_db_setup
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.common import TableName
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -45,21 +45,6 @@ def adapt_datetime(dt: datetime) -> str:
 
 sqlite3.register_adapter(AnyUrl, adapt_url)
 sqlite3.register_adapter(datetime, adapt_datetime)
-
-
-# TODO: Make more robust
-def is_db_setup() -> bool:
-    if not DB_PATH.exists():
-        return False
-
-    table_names = map(lambda n: f"'{n}'", TABLES)
-    tables_list = "(" + ", ".join(table_names) + ")"
-    query = f"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN {tables_list}"
-
-    with sqlite3.connect(DB_PATH) as conn:
-        results = conn.execute(query).fetchall()
-
-    return len(results) == len(TABLES)
 
 
 # NOTE: This function may seem useless, but in the earlier UFC events some
