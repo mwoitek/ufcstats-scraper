@@ -50,6 +50,8 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.validators import fill_height
+from ufcstats_scraper.scrapers.validators import fill_weight
 
 PercStr = Annotated[str, Field(pattern=r"\d+%")]
 PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -102,45 +104,8 @@ class PersonalInfo(CustomModel):
     )
     date_of_birth: Optional[CustomDate] = Field(default=None, validate_default=True)
 
-    # NOTE: The next 3 validators are the same (or almost the same) as the
-    # ones defined for the list scraper. I don't know how to reduce this
-    # code duplication in the latest version of Pydantic. For now, this is
-    # the best I can do, unfortunately.
-
-    @field_validator("height")
-    @classmethod
-    def fill_height(cls, height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if height is not None:
-            return height
-
-        height_str = info.data.get("height_str")
-        if not isinstance(height_str, str):
-            return
-
-        match = re.match(r"(\d{1})' (\d{1,2})\"", height_str)
-        match = cast(re.Match, match)
-
-        feet = int(match.group(1))
-        inches = int(match.group(2))
-
-        height = feet * 12 + inches
-        return height
-
-    @field_validator("weight")
-    @classmethod
-    def fill_weight(cls, weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if weight is not None:
-            return weight
-
-        weight_str = info.data.get("weight_str")
-        if not isinstance(weight_str, str):
-            return
-
-        match = re.match(r"(\d+) lbs[.]", weight_str)
-        match = cast(re.Match, match)
-
-        weight = int(match.group(1))
-        return weight
+    _fill_height = field_validator("height")(fill_height)
+    _fill_weight = field_validator("weight")(fill_weight)
 
     @field_validator("reach")
     @classmethod

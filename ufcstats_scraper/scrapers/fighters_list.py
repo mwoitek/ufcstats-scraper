@@ -43,6 +43,8 @@ from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.validators import fill_height
+from ufcstats_scraper.scrapers.validators import fill_weight
 
 logger = CustomLogger(
     name="fighters_list",
@@ -69,6 +71,9 @@ class Fighter(CustomModel):
     draws: NonNegativeInt
     current_champion: bool = False
 
+    _fill_height = field_validator("height")(fill_height)
+    _fill_weight = field_validator("weight")(fill_weight)
+
     @property
     def name(self) -> str:
         first_name = self.first_name
@@ -84,41 +89,6 @@ class Fighter(CustomModel):
         if self.name == "":
             raise ValueError("fighter has no name")
         return self
-
-    @field_validator("height")
-    @classmethod
-    def fill_height(cls, height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if height is not None:
-            return height
-
-        height_str = info.data.get("height_str")
-        if not isinstance(height_str, str):
-            return
-
-        match = re.match(r"(\d{1})' (\d{1,2})\"", height_str)
-        match = cast(re.Match, match)
-
-        feet = int(match.group(1))
-        inches = int(match.group(2))
-
-        height = feet * 12 + inches
-        return height
-
-    @field_validator("weight")
-    @classmethod
-    def fill_weight(cls, weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-        if weight is not None:
-            return weight
-
-        weight_str = info.data.get("weight_str")
-        if not isinstance(weight_str, str):
-            return
-
-        match = re.match(r"(\d+) lbs[.]", weight_str)
-        match = cast(re.Match, match)
-
-        weight = int(match.group(1))
-        return weight
 
     @field_validator("reach")
     @classmethod
