@@ -1,7 +1,11 @@
 import sqlite3
 from argparse import ArgumentParser
 
+from pydantic import ValidationError
+from pydantic import validate_call
+
 from ufcstats_scraper.common import custom_console as console
+from ufcstats_scraper.db.checks import is_db_setup
 from ufcstats_scraper.db.common import DB_PATH
 from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
 from ufcstats_scraper.db.common import TABLES
@@ -56,6 +60,24 @@ class DBCreator:
                 raise exc
 
 
+@validate_call
+def setup_db(reset: bool = False) -> None:
+    console.title("LINKS DB SETUP")
+    creator = DBCreator()
+
+    if reset:
+        creator.drop()
+        creator.create()
+        return
+
+    if is_db_setup():
+        console.info("DB is already setup.")
+        console.info("Nothing to do.")
+        return
+
+    creator.create()
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(description="Script for setting up the links database.")
     parser.add_argument("-q", "--quiet", action="store_true", dest="quiet", help="suppress output")
@@ -63,14 +85,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     console.quiet = args.quiet
-    console.title("LINKS DB SETUP")
-
     try:
-        creator = DBCreator()
-        if args.reset:
-            creator.drop()
-        creator.create()
-    except (FileNotFoundError, sqlite3.Error):
+        setup_db(args.reset)
+    except (FileNotFoundError, ValidationError, sqlite3.Error):
         console.quiet = False
         console.print_exception()
         exit(1)
