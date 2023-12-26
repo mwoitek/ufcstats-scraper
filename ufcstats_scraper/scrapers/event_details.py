@@ -1,8 +1,8 @@
-import sqlite3
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
 from pathlib import Path
+from sqlite3 import Error as SqliteError
 from time import sleep
 from typing import Any
 from typing import ClassVar
@@ -16,6 +16,7 @@ from bs4 import ResultSet
 from bs4 import Tag
 from pydantic import Field
 from pydantic import PositiveFloat
+from pydantic import PositiveInt
 from pydantic import ValidationError
 from pydantic import validate_call
 from requests.exceptions import RequestException
@@ -25,6 +26,8 @@ from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
+from ufcstats_scraper.db.checks import is_db_setup
+from ufcstats_scraper.db.checks import is_table_empty
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -189,13 +192,60 @@ class EventDetailsScraper(CustomModel):
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
 
+def check_links_db() -> bool:
+    try:
+        if not is_db_setup():
+            logger.info("Links DB is not setup")
+            console.danger("Links DB is not setup!")
+            console.info("Run setup command and try again.")
+            return False
+
+        if is_table_empty("event"):
+            logger.info("Links DB has no data from the events list")
+            console.danger("Links DB has no data from the events list!")
+            console.info("Scrape that data and try again.")
+            return False
+
+        if is_table_empty("fighter"):
+            logger.info("Links DB has no data from the fighters list")
+            console.danger("Links DB has no data from the fighters list!")
+            console.info("Scrape that data and try again.")
+            return False
+    except (FileNotFoundError, SqliteError) as exc:
+        logger.exception("Failed to check links DB")
+        raise exc
+
+    return True
+
+
+def read_events(
+    select: LinkSelection,
+    limit: Optional[PositiveInt] = None,
+) -> list[DBEvent]:
+    events: list[DBEvent] = []
+
+    console.subtitle("EVENT LINKS")
+    console.print("Retrieving event links...")
+
+    try:
+        with LinksDB() as db:
+            events.extend(db.read_events(select, limit))
+        console.success("Done!")
+    except (DBNotSetupError, SqliteError) as exc:
+        logger.exception("Failed to read events from DB")
+        console.danger("Failed!")
+        raise exc
+
+    return events
+
+
 def scrape_event(event: DBEvent) -> list[Fight]:
     console.subtitle(event.name.upper())
     console.print(f"Scraping page for [b]{event.name}[/b]...")
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
         raise exc
@@ -222,7 +272,7 @@ def scrape_event(event: DBEvent) -> list[Fight]:
         try:
             scraper.db_update_event()
             console.success("Done!")
-        except sqlite3.Error as exc_2:
+        except SqliteError as exc_2:
             logger.exception("Failed to update event status")
             console.danger("Failed!")
             raise exc_2
@@ -245,7 +295,7 @@ def scrape_event(event: DBEvent) -> list[Fight]:
         try:
             scraper.db_update_event()
             console.success("Done!")
-        except sqlite3.Error as exc:
+        except SqliteError as exc:
             logger.exception("Failed to update event status")
             console.danger("Failed!")
             raise exc
@@ -254,7 +304,7 @@ def scrape_event(event: DBEvent) -> list[Fight]:
     try:
         scraper.db_update_fight_data()
         console.success("Done!")
-    except sqlite3.Error as exc:
+    except SqliteError as exc:
         logger.exception("Failed to update fight data")
         console.danger("Failed!")
         raise exc
@@ -265,24 +315,15 @@ def scrape_event(event: DBEvent) -> list[Fight]:
 @validate_call
 def scrape_event_details(
     select: LinkSelection,
-    limit: Optional[int] = None,
+    limit: Optional[PositiveInt] = None,
     delay: PositiveFloat = config.default_delay,
 ) -> None:
     console.title("EVENT DETAILS")
 
-    console.subtitle("EVENT LINKS")
-    console.print("Retrieving event links...")
+    if not check_links_db():
+        return
 
-    events: list[DBEvent] = []
-    try:
-        with LinksDB() as db:
-            events.extend(db.read_events(select, limit))
-        console.success("Done!")
-    except (DBNotSetupError, sqlite3.Error) as exc:
-        logger.exception("Failed to read events from DB")
-        console.danger("Failed!")
-        raise exc
-
+    events = read_events(select, limit)
     num_events = len(events)
     if num_events == 0:
         console.info("No event to scrape.")
@@ -354,7 +395,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_event_details(args.select, limit, args.delay)
-    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, OSError, ScraperError, ValidationError, SqliteError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
