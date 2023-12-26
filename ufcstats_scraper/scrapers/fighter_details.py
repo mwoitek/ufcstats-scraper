@@ -1,10 +1,10 @@
 import re
-import sqlite3
 from argparse import ArgumentParser
 from datetime import datetime
 from json import dump
 from os import mkdir
 from pathlib import Path
+from sqlite3 import Error as SqliteError
 from time import sleep
 from typing import Annotated
 from typing import Any
@@ -35,6 +35,8 @@ from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.common import CustomModel
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
+from ufcstats_scraper.db.checks import is_db_setup
+from ufcstats_scraper.db.checks import is_table_empty
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -407,13 +409,54 @@ class FighterDetailsScraper(CustomModel):
         self.db.update_status("fighter", self.id, self.tried, self.success)
 
 
+def check_links_db() -> bool:
+    try:
+        if not is_db_setup():
+            logger.info("Links DB is not setup")
+            console.danger("Links DB is not setup!")
+            console.info("Run setup command and try again.")
+            return False
+
+        if is_table_empty("fighter"):
+            logger.info("Links DB has no data from the fighters list")
+            console.danger("Links DB has no data from the fighters list!")
+            console.info("Scrape that data and try again.")
+            return False
+    except (FileNotFoundError, SqliteError) as exc:
+        logger.exception("Failed to check links DB")
+        raise exc
+
+    return True
+
+
+def read_fighters(
+    select: LinkSelection,
+    limit: Optional[PositiveInt] = None,
+) -> list[DBFighter]:
+    fighters: list[DBFighter] = []
+
+    console.subtitle("FIGHTER LINKS")
+    console.print("Retrieving fighter links...")
+
+    try:
+        with LinksDB() as db:
+            fighters.extend(db.read_fighters(select, limit))
+        console.success("Done!")
+    except (DBNotSetupError, SqliteError) as exc:
+        logger.exception("Failed to read fighters from DB")
+        console.danger("Failed!")
+        raise exc
+
+    return fighters
+
+
 def scrape_fighter(fighter: DBFighter) -> Fighter:
     console.subtitle(fighter.name.upper())
     console.print(f"Scraping page for [b]{fighter.name}[/b]...")
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
         raise exc
@@ -440,7 +483,7 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
         try:
             scraper.db_update_fighter()
             console.success("Done!")
-        except sqlite3.Error as exc_2:
+        except SqliteError as exc_2:
             logger.exception("Failed to update fighter status")
             console.danger("Failed!")
             raise exc_2
@@ -460,7 +503,7 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
         try:
             scraper.db_update_fighter()
             console.success("Done!")
-        except sqlite3.Error as exc:
+        except SqliteError as exc:
             logger.exception("Failed to update fighter status")
             console.danger("Failed!")
             raise exc
@@ -472,24 +515,15 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
 @validate_call
 def scrape_fighter_details(
     select: LinkSelection,
-    limit: Optional[int] = None,
+    limit: Optional[PositiveInt] = None,
     delay: PositiveFloat = config.default_delay,
 ) -> None:
     console.title("FIGHTER DETAILS")
 
-    console.subtitle("FIGHTER LINKS")
-    console.print("Retrieving fighter links...")
+    if not check_links_db():
+        return
 
-    fighters: list[DBFighter] = []
-    try:
-        with LinksDB() as db:
-            fighters.extend(db.read_fighters(select, limit))
-        console.success("Done!")
-    except (DBNotSetupError, sqlite3.Error) as exc:
-        logger.exception("Failed to read fighters from DB")
-        console.danger("Failed!")
-        raise exc
-
+    fighters = read_fighters(select, limit)
     num_fighters = len(fighters)
     if num_fighters == 0:
         console.info("No fighter to scrape.")
@@ -558,7 +592,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighter_details(args.select, limit, args.delay)
-    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
