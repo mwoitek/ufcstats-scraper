@@ -70,6 +70,7 @@ MethodType = Literal[
 ]
 ResultType = Literal["Win", "Loss", "Draw", "No contest"]
 WeightClassType = Literal[
+    "Open Weight",
     "Strawweight",
     "Flyweight",
     "Bantamweight",
@@ -154,9 +155,9 @@ class Box(CustomModel):
     interim_title: Optional[bool] = None
     method: MethodType
     round: int = Field(..., ge=1, le=5)
-    time_str: str = Field(..., exclude=True, pattern=r"\d{1}:\d{2}")
+    time_str: str = Field(..., exclude=True, pattern=r"\d{1,2}:\d{2}")
     time: Optional[CustomTimeDelta] = Field(default=None, validate_default=True)
-    time_format: str = Field(..., pattern=r"\d{1} Rnd \((\d{1}-)+\d{1}\)")
+    time_format: str = Field(..., pattern=r"(\d{1} Rnd \((\d{1}-)+\d{1}\))|(No Time Limit)")
     referee: CleanName
     details_str: str = Field(..., exclude=True)
     details: Optional[str] = None
@@ -210,7 +211,7 @@ class Box(CustomModel):
         time_str = info.data.get("time_str")
         time_str = cast(str, time_str)
 
-        match = re.match(r"(\d{1}):(\d{2})", time_str)
+        match = re.match(r"(\d{1,2}):(\d{2})", time_str)
         match = cast(re.Match, match)
 
         time = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
@@ -221,7 +222,9 @@ class Box(CustomModel):
     def transform_time_format(cls, time_format: str) -> str:
         pattern = r"(\d{1}) Rnd \((\d{1}-)+(\d{1})\)"
         match = re.match(pattern, time_format, flags=re.IGNORECASE)
-        match = cast(re.Match, match)
+
+        if match is None:
+            return time_format.capitalize()
 
         num_rounds = int(match.group(1))
         minutes = int(match.group(3))
@@ -294,7 +297,7 @@ class Count(CustomModel):
 
 class FighterSignificantStrikes(CustomModel):
     total: Count
-    percentage_str: PercStr = Field(..., exclude=True)
+    percentage_str: Optional[PercStr] = Field(default=None, exclude=True)
     percentage: Optional[PercRatio] = Field(default=None, validate_default=True)
     head: Count
     body: Count
@@ -329,6 +332,11 @@ class FighterSignificantStrikes(CustomModel):
     def check_percentage(self) -> Self:
         total_landed = cast(int, self.total.landed)
         total_attempted = cast(int, self.total.attempted)
+
+        if total_attempted == 0:
+            assert total_landed == 0, "'total_landed' and 'total_attempted' are inconsistent"
+            assert self.percentage is None, "percentage should be undefined"
+            return self
 
         computed = round(total_landed / total_attempted, 2)
         scraped = cast(float, self.percentage)
@@ -496,8 +504,14 @@ class FightDetailsScraper(CustomModel):
 
         for raw_table in raw_tables:
             percentage_str_1, percentage_str_2 = raw_table[0].split(" ")
-            data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1}
-            data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2}
+
+            data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1.strip("-")}
+            if data_dict_1["percentage_str"] == "":
+                del data_dict_1["percentage_str"]
+
+            data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2.strip("-")}
+            if data_dict_2["percentage_str"] == "":
+                del data_dict_2["percentage_str"]
 
             for field, raw_value in zip(FIELDS, raw_table[1:]):
                 matches = re.findall(r"\d+ of \d+", raw_value)
@@ -528,7 +542,7 @@ class FightDetailsScraper(CustomModel):
                 "significant_strikes": self.scrape_significant_strikes(),
             }
             self.scraped_data = Fight.model_validate(data_dict)
-        except (AssertionError, IndexError, ValidationError) as exc:
+        except (AssertionError, AttributeError, IndexError, TypeError, ValidationError) as exc:
             raise NoScrapedDataError(self.link) from exc
 
         return self.scraped_data

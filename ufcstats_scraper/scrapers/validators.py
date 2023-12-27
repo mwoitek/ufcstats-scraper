@@ -31,7 +31,8 @@ def fill_ratio(value: Optional[PercRatio], info: ValidationInfo) -> Optional[Per
         return value
 
     field_str = info.data.get(f"{info.field_name}_str")
-    field_str = cast(str, field_str)
+    if not isinstance(field_str, str):
+        return
 
     match = re.match(r"(\d+)%", field_str)
     match = cast(re.Match, match)
