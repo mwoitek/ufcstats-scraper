@@ -201,7 +201,6 @@ class LinksDB:
           ON fight.fighter_1_id = f1.id
         INNER JOIN fighter AS f2
           ON fight.fighter_2_id = f2.id
-        ORDER BY fight.id DESC
         """
 
         match select:
@@ -211,6 +210,8 @@ class LinksDB:
                 query = f"{query} WHERE fight.success = 0"
             case "all":
                 pass
+
+        query = f"{query} ORDER BY fight.id DESC"
 
         if isinstance(limit, int):
             query = f"{query} LIMIT {limit}"
