@@ -44,6 +44,8 @@ from ufcstats_scraper.db.models import DBFighter
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import CustomDate
 from ufcstats_scraper.scrapers.common import FighterLink
+from ufcstats_scraper.scrapers.common import PercRatio
+from ufcstats_scraper.scrapers.common import PercStr
 from ufcstats_scraper.scrapers.common import Stance
 from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
@@ -51,11 +53,9 @@ from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
 from ufcstats_scraper.scrapers.validators import fill_height
+from ufcstats_scraper.scrapers.validators import fill_ratio
 from ufcstats_scraper.scrapers.validators import fill_reach
 from ufcstats_scraper.scrapers.validators import fill_weight
-
-PercStr = Annotated[str, Field(pattern=r"\d+%")]
-PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
 
 logger = CustomLogger(
     name="fighter_details",
@@ -141,23 +141,7 @@ class CareerStats(CustomModel):
     td_def: Optional[PercRatio] = Field(default=None, validate_default=True)
     sub_avg: NonNegativeFloat
 
-    @field_validator("str_acc", "str_def", "td_acc", "td_def")
-    @classmethod
-    def fill_ratio(cls, value: Optional[PercRatio], info: ValidationInfo) -> Optional[PercRatio]:
-        if value is not None:
-            return value
-
-        field_str = info.data.get(f"{info.field_name}_str")
-        field_str = cast(str, field_str)
-
-        match = re.match(r"(\d+)%", field_str)
-        match = cast(re.Match, match)
-
-        percent = int(match.group(1))
-        ratio = percent / 100
-        assert 0.0 <= ratio <= 1.0, f"{info.field_name} - invalid ratio: {ratio}"
-
-        return ratio
+    _fill_ratio = field_validator("str_acc", "str_def", "td_acc", "td_def")(fill_ratio)
 
 
 class Fighter(CustomModel):

@@ -4,6 +4,7 @@ from typing import Annotated
 from typing import Callable
 from typing import Literal
 
+from pydantic import Field
 from pydantic import HttpUrl
 from pydantic.functional_serializers import PlainSerializer
 from pydantic.functional_validators import AfterValidator
@@ -31,4 +32,6 @@ def fix_consecutive_spaces(s: str) -> str:
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
 CustomDate = Annotated[date, PlainSerializer(lambda d: d.isoformat(), return_type=str)]
+PercStr = Annotated[str, Field(pattern=r"\d+%")]
+PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
 Stance = Literal["Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"]

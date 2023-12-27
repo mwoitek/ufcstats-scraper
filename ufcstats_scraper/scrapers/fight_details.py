@@ -45,11 +45,14 @@ from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
 from ufcstats_scraper.scrapers.common import CleanName
 from ufcstats_scraper.scrapers.common import FightLink
+from ufcstats_scraper.scrapers.common import PercRatio
+from ufcstats_scraper.scrapers.common import PercStr
 from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
 from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
 from ufcstats_scraper.scrapers.exceptions import NoSoupError
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.validators import fill_ratio
 
 BonusType = Literal[
     "Fight of the Night",
@@ -291,8 +294,8 @@ class Count(CustomModel):
 
 class FighterSignificantStrikes(CustomModel):
     total: Count
-    percentage_str: str = Field(..., exclude=True, pattern=r"\d+%")
-    percentage: Optional[Annotated[float, Field(ge=0.0, le=1.0)]] = Field(default=None, validate_default=True)
+    percentage_str: PercStr = Field(..., exclude=True)
+    percentage: Optional[PercRatio] = Field(default=None, validate_default=True)
     head: Count
     body: Count
     leg: Count
@@ -300,21 +303,7 @@ class FighterSignificantStrikes(CustomModel):
     clinch: Count
     ground: Count
 
-    @field_validator("percentage")
-    @classmethod
-    def fill_percentage(cls, percentage: Optional[float], info: ValidationInfo) -> Optional[float]:
-        if percentage is not None:
-            return percentage
-
-        percentage_str = info.data.get("percentage_str")
-        percentage_str = cast(str, percentage_str)
-
-        match = re.match(r"(\d+)%", percentage_str)
-        match = cast(re.Match, match)
-
-        percentage = int(match.group(1)) / 100
-        assert 0.0 <= percentage <= 1.0, f"invalid percentage: {percentage}"
-        return percentage
+    _fill_ratio = field_validator("percentage")(fill_ratio)
 
     @model_validator(mode="after")
     def check_totals(self) -> Self:

@@ -5,6 +5,8 @@ from typing import cast
 from pydantic import PositiveInt
 from pydantic import ValidationInfo
 
+from ufcstats_scraper.scrapers.common import PercRatio
+
 
 def fill_height(height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
     if height is not None:
@@ -24,19 +26,21 @@ def fill_height(height: Optional[PositiveInt], info: ValidationInfo) -> Optional
     return height
 
 
-def fill_weight(weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
-    if weight is not None:
-        return weight
+def fill_ratio(value: Optional[PercRatio], info: ValidationInfo) -> Optional[PercRatio]:
+    if value is not None:
+        return value
 
-    weight_str = info.data.get("weight_str")
-    if not isinstance(weight_str, str):
-        return
+    field_str = info.data.get(f"{info.field_name}_str")
+    field_str = cast(str, field_str)
 
-    match = re.match(r"(\d+) lbs[.]", weight_str)
+    match = re.match(r"(\d+)%", field_str)
     match = cast(re.Match, match)
 
-    weight = int(match.group(1))
-    return weight
+    percent = int(match.group(1))
+    ratio = percent / 100
+    assert 0.0 <= ratio <= 1.0, f"{info.field_name} - invalid ratio: {ratio}"
+
+    return ratio
 
 
 def fill_reach(reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
@@ -52,3 +56,18 @@ def fill_reach(reach: Optional[PositiveInt], info: ValidationInfo) -> Optional[P
 
     reach = int(match.group(1))
     return reach
+
+
+def fill_weight(weight: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
+    if weight is not None:
+        return weight
+
+    weight_str = info.data.get("weight_str")
+    if not isinstance(weight_str, str):
+        return
+
+    match = re.match(r"(\d+) lbs[.]", weight_str)
+    match = cast(re.Match, match)
+
+    weight = int(match.group(1))
+    return weight
