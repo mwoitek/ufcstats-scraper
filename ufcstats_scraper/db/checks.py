@@ -33,14 +33,19 @@ def read_script_columns(table: TableName) -> set[str]:
     return script_columns
 
 
-def has_expected_columns(table: TableName) -> bool:
+def read_db_columns(table: TableName) -> set[str]:
     query = f"SELECT name FROM pragma_table_info('{table}')"
     logger.debug(f"Query: {query}")
     with sqlite3.connect(DB_PATH) as conn:
         db_columns: set[str] = set(row[0] for row in conn.execute(query))
     logger.debug(f"DB columns for {table} table: {db_columns}")
+    return db_columns
+
+
+def has_expected_columns(table: TableName) -> bool:
     script_columns = read_script_columns(table)
-    return db_columns.issubset(script_columns) and script_columns.issubset(db_columns)
+    db_columns = read_db_columns(table)
+    return script_columns.issubset(db_columns) and db_columns.issubset(script_columns)
 
 
 def is_db_setup() -> bool:
