@@ -1,49 +1,39 @@
-import sqlite3
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
-from pathlib import Path
+from sqlite3 import Error as SqliteError
 from string import ascii_lowercase
 from time import sleep
-from typing import Annotated
-from typing import Any
-from typing import ClassVar
-from typing import Optional
-from typing import Self
-from typing import cast
+from typing import Any, Optional, Self
 from urllib.parse import urlencode
 
 import requests
-from bs4 import BeautifulSoup
-from bs4 import ResultSet
-from bs4 import Tag
-from pydantic import Field
-from pydantic import NonNegativeInt
-from pydantic import PositiveFloat
-from pydantic import PositiveInt
-from pydantic import ValidationError
-from pydantic import field_validator
-from pydantic import model_validator
-from pydantic import validate_call
+from bs4 import BeautifulSoup, ResultSet, Tag
+from pydantic import (
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+    validate_call,
+)
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import CustomLogger, CustomModel
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.scrapers.common import CleanName
-from ufcstats_scraper.scrapers.common import FighterLink
-from ufcstats_scraper.scrapers.common import Stance
-from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
-from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
-from ufcstats_scraper.scrapers.exceptions import NoSoupError
-from ufcstats_scraper.scrapers.exceptions import ScraperError
-from ufcstats_scraper.scrapers.validators import fill_height
-from ufcstats_scraper.scrapers.validators import fill_reach
-from ufcstats_scraper.scrapers.validators import fill_weight
+from ufcstats_scraper.scrapers.common import CleanName, FighterLink, Stance
+from ufcstats_scraper.scrapers.exceptions import (
+    MissingHTMLElementError,
+    NoScrapedDataError,
+    NoSoupError,
+    ScraperError,
+)
+from ufcstats_scraper.scrapers.validators import fill_height, fill_reach, fill_weight
 
 logger = CustomLogger(
     name="fighters_list",
@@ -52,27 +42,22 @@ logger = CustomLogger(
 
 
 class Fighter(CustomModel):
-    link: FighterLink = Field(..., exclude=True)
+    link: FighterLink
     first_name: Optional[CleanName] = None
     last_name: Optional[CleanName] = None
     nickname: Optional[CleanName] = None
-    height_str: Optional[Annotated[str, Field(pattern=r"\d{1}' \d{1,2}\"")]] = Field(
-        default=None, exclude=True
-    )
-    height: Optional[PositiveInt] = Field(default=None, validate_default=True)
-    weight_str: Optional[Annotated[str, Field(pattern=r"\d+ lbs[.]")]] = Field(default=None, exclude=True)
-    weight: Optional[PositiveInt] = Field(default=None, validate_default=True)
-    reach_str: Optional[Annotated[str, Field(pattern=r"\d+[.]0\"")]] = Field(default=None, exclude=True)
-    reach: Optional[PositiveInt] = Field(default=None, validate_default=True)
+    height: Optional[PositiveInt] = None
+    weight: Optional[PositiveInt] = None
+    reach: Optional[PositiveInt] = None
     stance: Optional[Stance] = None
     wins: NonNegativeInt
     losses: NonNegativeInt
     draws: NonNegativeInt
     current_champion: bool = False
 
-    _fill_height = field_validator("height")(fill_height)
-    _fill_weight = field_validator("weight")(fill_weight)
-    _fill_reach = field_validator("reach")(fill_reach)
+    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore
+    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore
+    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore
 
     @property
     def name(self) -> str:
@@ -91,18 +76,14 @@ class Fighter(CustomModel):
         return self
 
 
-class FightersListScraper(CustomModel):
-    BASE_URL: ClassVar[str] = "http://www.ufcstats.com/statistics/fighters"
-    DATA_DIR: ClassVar[Path] = config.data_dir / "fighters_list"
+class FightersListScraper:
+    BASE_URL = "http://ufcstats.com/statistics/fighters"
+    DATA_DIR = config.data_dir / "fighters_list"
 
-    letter: Annotated[str, Field(pattern=r"[a-z]{1}")]
-    db: LinksDB
-
-    soup: Optional[BeautifulSoup] = None
-    rows: Optional[ResultSet[Tag]] = None
-    scraped_data: Optional[list[Fighter]] = None
-
-    success: bool = False
+    def __init__(self, letter: str, db: LinksDB) -> None:
+        self.letter = letter
+        self.db = db
+        self.success = False
 
     def get_soup(self) -> BeautifulSoup:
         params = {"char": self.letter, "page": "all"}
@@ -114,12 +95,11 @@ class FightersListScraper(CustomModel):
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}")
 
-        html = response.text
-        self.soup = BeautifulSoup(html, "lxml")
+        self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
 
     def get_table_rows(self) -> ResultSet[Tag]:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         table_body = self.soup.find("tbody")
@@ -150,9 +130,9 @@ class FightersListScraper(CustomModel):
             "first_name",
             "last_name",
             "nickname",
-            "height_str",
-            "weight_str",
-            "reach_str",
+            "height",
+            "weight",
+            "reach",
             "stance",
             "wins",
             "losses",
@@ -170,7 +150,6 @@ class FightersListScraper(CustomModel):
     def scrape(self) -> list[Fighter]:
         self.get_soup()
         self.get_table_rows()
-        self.rows = cast(ResultSet[Tag], self.rows)
 
         scraped_data: list[Fighter] = []
         for row in self.rows:
@@ -190,7 +169,7 @@ class FightersListScraper(CustomModel):
         return self.scraped_data
 
     def save_json(self) -> None:
-        if self.scraped_data is None:
+        if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
         try:
@@ -198,7 +177,7 @@ class FightersListScraper(CustomModel):
         except FileExistsError:
             logger.info(f"Directory {FightersListScraper.DATA_DIR} already exists")
 
-        out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in self.scraped_data]
+        out_data = [fighter.model_dump(by_alias=True, exclude_none=True) for fighter in self.scraped_data]
         out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
@@ -207,20 +186,19 @@ class FightersListScraper(CustomModel):
 
     def db_insert_fighters(self) -> None:
         if self.success:
-            self.scraped_data = cast(list[Fighter], self.scraped_data)
             self.db.insert_fighters(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
 
 
-def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fighter]:
+def scrape_letter(letter: str) -> list[Fighter]:
     letter_upper = letter.upper()
     console.subtitle(letter_upper)
     console.print(f"Scraping fighter data for letter {letter_upper}...")
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
         raise exc
@@ -229,14 +207,12 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
     try:
         scraper.scrape()
         console.success("Done!")
+        console.success(f"Scraped data for {len(scraper.scraped_data)} fighters.")
     except ScraperError as exc:
         logger.exception(f"Failed to scrape data for {letter_upper}")
         console.danger("Failed!")
         console.danger("No data was scraped.")
         raise exc
-
-    fighters = cast(list[Fighter], scraper.scraped_data)
-    console.success(f"Scraped data for {len(fighters)} fighters.")
 
     console.print("Saving scraped data...")
     try:
@@ -251,12 +227,12 @@ def scrape_letter(letter: Annotated[str, Field(pattern=r"[a-z]{1}")]) -> list[Fi
     try:
         scraper.db_insert_fighters()
         console.success("Done!")
-    except sqlite3.Error as exc:
+    except SqliteError as exc:
         logger.exception("Failed to insert fighter data into DB")
         console.danger("Failed!")
         raise exc
 
-    return fighters
+    return scraper.scraped_data
 
 
 @validate_call
@@ -266,8 +242,10 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
     all_fighters: list[Fighter] = []
     ok_letters: list[str] = []
 
+    num_letters = len(ascii_lowercase)
+
     with progress:
-        task = progress.add_task("Scraping fighters...", total=26)
+        task = progress.add_task("Scraping fighters...", total=num_letters)
 
         for i, letter in enumerate(ascii_lowercase, start=1):
             try:
@@ -279,7 +257,7 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
 
             progress.update(task, advance=1)
 
-            if i < 26:
+            if i < num_letters:
                 console.info(f"Continuing in {delay} second(s)...")
                 sleep(delay)
 
@@ -291,12 +269,12 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
         console.danger("No data was scraped.")
         raise NoScrapedDataError(FightersListScraper.BASE_URL)
 
-    letters_str = "all letters" if len(ok_letters) == 26 else "letters " + ", ".join(ok_letters)
-    console.info(f"Successfully scraped data for {letters_str}.")
+    msg_letters = "all letters" if len(ok_letters) == num_letters else "letter(s) " + ", ".join(ok_letters)
+    console.info(f"Successfully scraped data for {msg_letters}.")
     console.info(f"Scraped data for {num_fighters} fighters.")
 
     console.print("Saving combined data...")
-    out_data = [f.model_dump(by_alias=True, exclude_none=True) for f in all_fighters]
+    out_data = [fighter.model_dump(by_alias=True, exclude_none=True) for fighter in all_fighters]
     out_file = FightersListScraper.DATA_DIR / "combined.json"
 
     try:
@@ -325,7 +303,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fighters_list(args.delay)
-    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
