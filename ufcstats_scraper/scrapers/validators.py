@@ -1,11 +1,23 @@
 import re
-from typing import Optional
-from typing import cast
+from typing import Callable, Literal, Optional, cast
 
-from pydantic import PositiveInt
-from pydantic import ValidationInfo
+from pydantic import HttpUrl, PositiveInt, ValidationInfo
 
 from ufcstats_scraper.scrapers.common import PercRatio
+
+
+def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl], HttpUrl]:
+    def validator(link: HttpUrl) -> HttpUrl:
+        if link.host is None or not link.host.endswith("ufcstats.com"):
+            raise ValueError("link has invalid host")
+        if link.path is None or not link.path.startswith(f"/{type_}-details/"):
+            raise ValueError("link has invalid path")
+        return link
+
+    return validator
+
+
+# TODO: Turn these into wrap validators
 
 
 def fill_height(height: Optional[PositiveInt], info: ValidationInfo) -> Optional[PositiveInt]:
