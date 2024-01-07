@@ -1,9 +1,7 @@
 import re
-from typing import Callable, Literal, Optional, cast
+from typing import Callable, Literal, Optional
 
-from pydantic import HttpUrl, ValidationInfo, ValidatorFunctionWrapHandler
-
-from ufcstats_scraper.scrapers.common import PercRatio
+from pydantic import HttpUrl, ValidatorFunctionWrapHandler
 
 
 def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl], HttpUrl]:
@@ -42,20 +40,10 @@ def fill_reach(reach: Optional[str], handler: ValidatorFunctionWrapHandler) -> O
     return handler(int(match.group(1)))
 
 
-# TODO: Turn into wrap validator
-def fill_ratio(value: Optional[PercRatio], info: ValidationInfo) -> Optional[PercRatio]:
-    if value is not None:
-        return value
-
-    field_str = info.data.get(f"{info.field_name}_str")
-    if not isinstance(field_str, str):
+def fill_ratio(percent: Optional[str], handler: ValidatorFunctionWrapHandler) -> Optional[float]:
+    if percent is None:
         return
-
-    match = re.match(r"(\d+)%", field_str)
-    match = cast(re.Match, match)
-
-    percent = int(match.group(1))
-    ratio = percent / 100
-    assert 0.0 <= ratio <= 1.0, f"{info.field_name} - invalid ratio: {ratio}"
-
-    return ratio
+    match = re.match(r"(\d+)%", percent.strip())
+    assert isinstance(match, re.Match)
+    ratio = int(match.group(1)) / 100
+    return handler(ratio)

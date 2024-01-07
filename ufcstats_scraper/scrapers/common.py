@@ -31,6 +31,5 @@ FightLink = Annotated[
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]
 CustomDate = Annotated[date, PlainSerializer(lambda d: d.isoformat(), return_type=str)]
-PercStr = Annotated[str, Field(pattern=r"\d+%")]
 PercRatio = Annotated[float, Field(ge=0.0, le=1.0)]
 Stance = Literal["Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"]
