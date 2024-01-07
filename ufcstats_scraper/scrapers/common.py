@@ -21,7 +21,11 @@ def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl
     return validator
 
 
-EventLink = Annotated[HttpUrl, AfterValidator(check_link("event"))]
+EventLink = Annotated[
+    HttpUrl,
+    AfterValidator(check_link("event")),
+    PlainSerializer(lambda l: str(l), return_type=str),
+]
 FighterLink = Annotated[HttpUrl, AfterValidator(check_link("fighter"))]
 FightLink = Annotated[HttpUrl, AfterValidator(check_link("fight"))]
 

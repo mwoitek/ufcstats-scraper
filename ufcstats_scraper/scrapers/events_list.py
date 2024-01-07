@@ -1,36 +1,28 @@
 import datetime
 import re
-import sqlite3
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
-from typing import Any
-from typing import Optional
-from typing import Self
-from typing import cast
+from sqlite3 import Error as SqliteError
+from typing import Any, Callable, Optional, Self
 
 import requests
-from bs4 import BeautifulSoup
-from bs4 import ResultSet
-from bs4 import Tag
-from pydantic import Field
-from pydantic import ValidationError
-from pydantic import computed_field
-from pydantic import model_validator
+from bs4 import BeautifulSoup, ResultSet, Tag
+from pydantic import ValidationError, ValidatorFunctionWrapHandler, field_validator, model_validator
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import CustomLogger, CustomModel
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.scrapers.common import CustomDate
-from ufcstats_scraper.scrapers.common import EventLink
-from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
-from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
-from ufcstats_scraper.scrapers.exceptions import NoSoupError
-from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.common import CustomDate, EventLink
+from ufcstats_scraper.scrapers.exceptions import (
+    MissingHTMLElementError,
+    NoScrapedDataError,
+    NoSoupError,
+    ScraperError,
+)
 
 logger = CustomLogger(
     name="events_list",
@@ -39,42 +31,39 @@ logger = CustomLogger(
 
 
 class Location(CustomModel):
-    location_str: str = Field(..., exclude=True, pattern=r"[^,]+(, [^,]+)?, [^,]+")
-    city: Optional[str] = None
+    city: str
     state: Optional[str] = None
-    country: Optional[str] = None
+    country: str
 
-    @model_validator(mode="after")
-    def get_location_parts(self) -> Self:
+    @model_validator(mode="wrap")  # pyright: ignore
+    def get_location_parts(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        assert isinstance(self, dict)
+
         pattern = r"(?P<city>[^,]+)(, (?P<state>[^,]+))?, (?P<country>[^,]+)"
-        match = re.match(pattern, self.location_str)
-        match = cast(re.Match, match)
+        match = re.match(pattern, self["location_str"])
+        assert isinstance(match, re.Match)
 
-        for field, val in match.groupdict().items():
-            if isinstance(val, str):
-                setattr(self, field, val)
+        for field, value in match.groupdict().items():
+            self[field] = value
 
-        return self
+        return handler(self)
 
 
 class Event(CustomModel):
-    link: EventLink = Field(..., exclude=True)
+    link: EventLink
     name: str
-    date_str: str = Field(..., exclude=True, pattern=r"[A-Z][a-z]+ \d{2}, \d{4}")
+    date: CustomDate
     location: Location
 
-    @computed_field
-    @property
-    def date(self) -> CustomDate:
-        return datetime.datetime.strptime(self.date_str, "%B %d, %Y").date()
-
-    def to_dict(self) -> dict[str, Any]:
-        data_dict = self.model_dump(exclude_none=True)
-        return {k: data_dict[k] for k in ["name", "date", "location"]}
+    @field_validator("date", mode="wrap")  # pyright: ignore
+    @classmethod
+    def convert_date(cls, date: str, handler: ValidatorFunctionWrapHandler) -> datetime.date:
+        converted = datetime.datetime.strptime(date.strip(), "%B %d, %Y").date()
+        return handler(converted)
 
 
 class EventsListScraper:
-    BASE_URL = "http://www.ufcstats.com/statistics/events/completed"
+    BASE_URL = "http://ufcstats.com/statistics/events/completed"
     DATA_DIR = config.data_dir / "events_list"
 
     def __init__(self, db: LinksDB) -> None:
@@ -90,8 +79,7 @@ class EventsListScraper:
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(EventsListScraper.BASE_URL)
 
-        html = response.text
-        self.soup = BeautifulSoup(html, "lxml")
+        self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
 
     def get_table_rows(self) -> ResultSet[Tag]:
@@ -125,10 +113,10 @@ class EventsListScraper:
         date_span = cols[0].find("span")
         if not isinstance(date_span, Tag):
             raise MissingHTMLElementError("Date span (span)")
-        data_dict["date_str"] = date_span.get_text()
+        data_dict["date"] = date_span.get_text()
 
         # Scrape location
-        data_dict["location"] = Location(location_str=cols[1].get_text())
+        data_dict["location"] = {"location_str": cols[1].get_text()}
 
         return Event.model_validate(data_dict)
 
@@ -164,7 +152,7 @@ class EventsListScraper:
         except FileExistsError:
             logger.info(f"Directory {EventsListScraper.DATA_DIR} already exists")
 
-        out_data = [e.to_dict() for e in self.scraped_data]
+        out_data = [event.model_dump(exclude_none=True) for event in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
@@ -184,7 +172,7 @@ def scrape_events_list() -> None:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
         raise exc
@@ -204,7 +192,7 @@ def scrape_events_list() -> None:
     try:
         scraper.save_json()
         console.success("Done!")
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
         logger.exception("Failed to save data to JSON")
         console.danger("Failed!")
         raise exc
@@ -213,7 +201,7 @@ def scrape_events_list() -> None:
     try:
         scraper.db_insert_events()
         console.success("Done!")
-    except sqlite3.Error as exc:
+    except SqliteError as exc:
         logger.exception("Failed to insert event data into DB")
         console.danger("Failed!")
         raise exc
@@ -227,7 +215,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_events_list()
-    except (DBNotSetupError, OSError, ScraperError, ValueError, sqlite3.Error):
+    except (DBNotSetupError, OSError, ScraperError, SqliteError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
