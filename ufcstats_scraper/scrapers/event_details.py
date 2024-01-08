@@ -1,45 +1,30 @@
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
-from pathlib import Path
 from sqlite3 import Error as SqliteError
 from time import sleep
-from typing import Any
-from typing import ClassVar
-from typing import Optional
-from typing import cast
-from typing import get_args
+from typing import Any, Optional, get_args
 
 import requests
-from bs4 import BeautifulSoup
-from bs4 import ResultSet
-from bs4 import Tag
-from pydantic import Field
-from pydantic import PositiveFloat
-from pydantic import PositiveInt
-from pydantic import ValidationError
-from pydantic import validate_call
+from bs4 import BeautifulSoup, ResultSet, Tag
+from pydantic import PositiveFloat, PositiveInt, ValidationError, validate_call
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
-from ufcstats_scraper.common import progress
-from ufcstats_scraper.db.checks import is_db_setup
-from ufcstats_scraper.db.checks import is_table_empty
+from ufcstats_scraper.db.checks import is_db_setup, is_table_empty
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBEvent
-from ufcstats_scraper.scrapers.common import CleanName
-from ufcstats_scraper.scrapers.common import EventLink
-from ufcstats_scraper.scrapers.common import FighterLink
-from ufcstats_scraper.scrapers.common import FightLink
-from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
-from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
-from ufcstats_scraper.scrapers.exceptions import NoSoupError
-from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.common import CleanName, EventLink, FightLink, FighterLink
+from ufcstats_scraper.scrapers.exceptions import (
+    MissingHTMLElementError,
+    NoScrapedDataError,
+    NoSoupError,
+    ScraperError,
+)
 
 logger = CustomLogger(
     name="event_details",
@@ -48,7 +33,7 @@ logger = CustomLogger(
 
 
 class Fighter(CustomModel):
-    link: FighterLink = Field(..., exclude=True)
+    link: FighterLink
     name: CleanName
 
     def __hash__(self) -> int:
@@ -56,50 +41,42 @@ class Fighter(CustomModel):
 
 
 class Fight(CustomModel):
-    event_id: int = Field(..., exclude=True)
-    event_name: str
-    link: FightLink = Field(..., exclude=True)
+    link: FightLink
     fighter_1: Fighter
     fighter_2: Fighter
 
-    def to_dict(self) -> dict[str, Any]:
-        data_dict = self.model_dump(by_alias=True, exclude_none=True)
-        data_dict["event"] = data_dict.pop("eventName")
-        data_dict["fighter1"] = data_dict.pop("fighter1").get("name")
-        data_dict["fighter2"] = data_dict.pop("fighter2").get("name")
-        return data_dict
 
-
-class EventDetailsScraper(CustomModel):
-    DATA_DIR: ClassVar[Path] = config.data_dir / "event_details"
-
-    id: int
+class Event(CustomModel):
     link: EventLink
     name: str
-    db: LinksDB
+    fights: list[Fight]
 
-    soup: Optional[BeautifulSoup] = None
-    rows: Optional[ResultSet[Tag]] = None
-    scraped_data: Optional[list[Fight]] = None
 
-    tried: bool = False
-    success: Optional[bool] = None
+class EventDetailsScraper:
+    DATA_DIR = config.data_dir / "event_details"
+
+    def __init__(self, id: int, link: str, name: str, db: LinksDB) -> None:
+        self.id = id
+        self.link = link
+        self.name = name
+        self.db = db
+        self.tried = False
+        self.success: Optional[bool] = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
-            response = requests.get(str(self.link))
+            response = requests.get(self.link)
         except RequestException as exc:
             raise NoSoupError(self.link) from exc
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(self.link)
 
-        html = response.text
-        self.soup = BeautifulSoup(html, "lxml")
+        self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
 
     def get_table_rows(self) -> ResultSet[Tag]:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         table_body = self.soup.find("tbody")
@@ -113,11 +90,10 @@ class EventDetailsScraper(CustomModel):
         self.rows = rows
         return self.rows
 
-    def scrape_row(self, row: Tag) -> Fight:
-        data_dict: dict[str, Any] = {"event_id": self.id, "event_name": self.name}
-
+    @staticmethod
+    def scrape_row(row: Tag) -> Fight:
         # Scrape fight link
-        data_dict["link"] = row.get("data-link")
+        data_dict: dict[str, Any] = {"link": row.get("data-link")}
 
         # Get 2nd column
         cols: ResultSet[Tag] = row.find_all("td", limit=2)
@@ -130,10 +106,8 @@ class EventDetailsScraper(CustomModel):
         anchors: ResultSet[Tag] = col.find_all("a")
         if len(anchors) != 2:
             raise MissingHTMLElementError("Anchor tags (a)")
-
         for i, anchor in enumerate(anchors, start=1):
-            fighter_dict = {"link": anchor.get("href"), "name": anchor.get_text()}
-            data_dict[f"fighter_{i}"] = Fighter.model_validate(fighter_dict)
+            data_dict[f"fighter_{i}"] = {"link": anchor.get("href"), "name": anchor.get_text()}
 
         return Fight.model_validate(data_dict)
 
@@ -143,12 +117,11 @@ class EventDetailsScraper(CustomModel):
 
         self.get_soup()
         self.get_table_rows()
-        self.rows = cast(ResultSet[Tag], self.rows)
 
         scraped_data: list[Fight] = []
         for row in self.rows:
             try:
-                fight = self.scrape_row(row)
+                fight = EventDetailsScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
                 logger.debug(f"Row: {row}")
@@ -162,7 +135,7 @@ class EventDetailsScraper(CustomModel):
         return self.scraped_data
 
     def save_json(self) -> None:
-        if self.scraped_data is None:
+        if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
         try:
@@ -170,9 +143,18 @@ class EventDetailsScraper(CustomModel):
         except FileExistsError:
             logger.info(f"Directory {EventDetailsScraper.DATA_DIR} already exists")
 
-        out_data = [f.to_dict() for f in self.scraped_data]
-        file_name = str(self.link).split("/")[-1]
+        event = Event.model_validate(
+            {
+                "link": self.link,
+                "name": self.name,
+                "fights": self.scraped_data,
+            }
+        )
+        out_data = event.model_dump(by_alias=True, exclude_none=True)
+
+        file_name = self.link.split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
+
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
@@ -186,7 +168,6 @@ class EventDetailsScraper(CustomModel):
 
     def db_update_fight_data(self) -> None:
         if self.success:
-            self.scraped_data = cast(list[Fight], self.scraped_data)
             self.db.update_fight_data(self.scraped_data)
         else:
             logger.info("DB was not updated since scraped data was not saved to JSON")
@@ -218,10 +199,7 @@ def check_links_db() -> bool:
     return True
 
 
-def read_events(
-    select: LinkSelection,
-    limit: Optional[PositiveInt] = None,
-) -> list[DBEvent]:
+def read_events(select: LinkSelection, limit: Optional[int] = None) -> list[DBEvent]:
     events: list[DBEvent] = []
 
     console.subtitle("EVENT LINKS")
@@ -239,7 +217,7 @@ def read_events(
     return events
 
 
-def scrape_event(event: DBEvent) -> list[Fight]:
+def scrape_event(event: DBEvent) -> Event:
     console.subtitle(event.name.upper())
     console.print(f"Scraping page for [b]{event.name}[/b]...")
 
@@ -250,18 +228,11 @@ def scrape_event(event: DBEvent) -> list[Fight]:
         console.danger("Failed!")
         raise exc
 
-    data_dict = dict(db=db, **event._asdict())
-    try:
-        scraper = EventDetailsScraper.model_validate(data_dict)
-    except ValidationError as exc:
-        logger.exception("Failed to create scraper object")
-        logger.debug(f"Scraper args: {data_dict}")
-        console.danger("Failed!")
-        raise exc
-
+    scraper = EventDetailsScraper(db=db, **event._asdict())
     try:
         scraper.scrape()
         console.success("Done!")
+        console.success(f"Scraped data for {len(scraper.scraped_data)} fights.")
     except ScraperError as exc_1:
         logger.exception("Failed to scrape event details")
         logger.debug(f"Event: {event}")
@@ -278,9 +249,6 @@ def scrape_event(event: DBEvent) -> list[Fight]:
             raise exc_2
 
         raise exc_1
-
-    fights = cast(list[Fight], scraper.scraped_data)
-    console.success(f"Scraped data for {len(fights)} fights.")
 
     console.print("Saving scraped data...")
     try:
@@ -309,7 +277,13 @@ def scrape_event(event: DBEvent) -> list[Fight]:
         console.danger("Failed!")
         raise exc
 
-    return fights
+    return Event.model_validate(
+        {
+            "link": scraper.link,
+            "name": scraper.name,
+            "fights": scraper.scraped_data,
+        }
+    )
 
 
 @validate_call
@@ -323,22 +297,22 @@ def scrape_event_details(
     if not check_links_db():
         return
 
-    events = read_events(select, limit)
-    num_events = len(events)
+    db_events = read_events(select, limit)
+    num_events = len(db_events)
     if num_events == 0:
         console.info("No event to scrape.")
         return
     console.success(f"Got {num_events} event(s) to scrape.")
 
+    scraped_events: list[Event] = []
+    ok_count = 0
+
     with progress:
         task = progress.add_task("Scraping events...", total=num_events)
-        num_fights = 0
-        ok_count = 0
 
-        for i, event in enumerate(events, start=1):
+        for i, db_event in enumerate(db_events, start=1):
             try:
-                fights = scrape_event(event)
-                num_fights += len(fights)
+                scraped_events.append(scrape_event(db_event))
                 ok_count += 1
             except ScraperError:
                 pass
@@ -356,9 +330,13 @@ def scrape_event_details(
         console.danger("No data was scraped.")
         raise NoScrapedDataError("http://ufcstats.com/event-details/")
 
-    count_str = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
-    console.info(f"Successfully scraped data for {count_str}.")
+    msg_count = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
+    console.info(f"Successfully scraped data for {msg_count}.")
+
+    num_fights = sum(len(event.fights) for event in scraped_events)
     console.info(f"Scraped data for {num_fights} fights.")
+
+    # TODO: Save combined data
 
 
 if __name__ == "__main__":
