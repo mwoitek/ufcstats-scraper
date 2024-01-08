@@ -1,13 +1,15 @@
-[tool.black]
-line-length = 110
-target-version = ["py311"]
-
-[tool.isort]
-profile = "black"
-line_length = 110
-
 [tool.pyright]
 useLibraryCodeForTypes = true
 analyzeUnannotatedFunctions = false
 reportUnnecessaryCast = "information"
 reportUnnecessaryTypeIgnoreComment = "information"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["I"]
+
+[tool.ruff.lint.isort]
+case-sensitive = true
