@@ -1,31 +1,22 @@
 import sqlite3
 from collections.abc import Collection
 from datetime import datetime
-from typing import TYPE_CHECKING
-from typing import Any
-from typing import Optional
-from typing import Self
-from typing import Union
-from typing import cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 from pydantic import AnyUrl
-from pydantic import PositiveInt
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.db.checks import is_db_setup
-from ufcstats_scraper.db.common import DB_PATH
-from ufcstats_scraper.db.common import LinkSelection
-from ufcstats_scraper.db.common import TableName
+from ufcstats_scraper.db.common import DB_PATH, LinkSelection, TableName
 from ufcstats_scraper.db.exceptions import DBNotSetupError
-from ufcstats_scraper.db.models import DBEvent
-from ufcstats_scraper.db.models import DBFight
-from ufcstats_scraper.db.models import DBFighter
+from ufcstats_scraper.db.models import DBEvent, DBFight, DBFighter
 
 if TYPE_CHECKING:
+    from ufcstats_scraper.scrapers.event_details import Event as EventDetails
     from ufcstats_scraper.scrapers.event_details import Fight
     from ufcstats_scraper.scrapers.event_details import Fighter as EventFighter
-    from ufcstats_scraper.scrapers.events_list import Event
+    from ufcstats_scraper.scrapers.events_list import Event as ListEvent
     from ufcstats_scraper.scrapers.fighters_list import Fighter as ListFighter
 
 default_select = cast(LinkSelection, config.default_select)
@@ -91,7 +82,7 @@ class LinksDB:
         self.cur.execute(query, {"link": link})
         return self.cur.fetchone() is not None
 
-    def insert_events(self, events: Collection["Event"]) -> None:
+    def insert_events(self, events: Collection["ListEvent"]) -> None:
         logger.info(f"Got {len(events)} events to insert into DB")
         query = "INSERT INTO event (link, name) VALUES (:link, :name)"
         new_events = filter(lambda e: not self.link_exists("event", e.link), events)
@@ -112,10 +103,10 @@ class LinksDB:
     @staticmethod
     def build_read_query(
         table: TableName,
-        extra_cols: Union[str, list[str]],
+        extra_cols: str | list[str],
         select: LinkSelection = default_select,
         reverse: bool = False,
-        limit: Optional[PositiveInt] = None,
+        limit: int | None = None,
     ) -> str:
         cols = ["id", "link"]
         if isinstance(extra_cols, str):
@@ -145,7 +136,7 @@ class LinksDB:
     def read_events(
         self,
         select: LinkSelection = default_select,
-        limit: Optional[PositiveInt] = None,
+        limit: int | None = None,
     ) -> list[DBEvent]:
         # The most recent events are added to the DB first. But I want to
         # scrape the data in reverse order.
@@ -163,9 +154,14 @@ class LinksDB:
     def read_fighters(
         self,
         select: LinkSelection = default_select,
-        limit: Optional[PositiveInt] = None,
+        limit: int | None = None,
     ) -> list[DBFighter]:
-        query = LinksDB.build_read_query(table="fighter", extra_cols="name", select=select, limit=limit)
+        query = LinksDB.build_read_query(
+            table="fighter",
+            extra_cols="name",
+            select=select,
+            limit=limit,
+        )
         fighters = [DBFighter(*row) for row in self.cur.execute(query)]
         logger.info(f"Read {len(fighters)} fighters from DB")
         return fighters
@@ -183,7 +179,7 @@ class LinksDB:
     def read_fights(
         self,
         select: LinkSelection = default_select,
-        limit: Optional[PositiveInt] = None,
+        limit: int | None = None,
     ) -> list[DBFight]:
         # The most recent fights are added to the DB first. But I want to
         # scrape the data in reverse order.
@@ -220,7 +216,7 @@ class LinksDB:
         logger.info(f"Read {len(fights)} fights from DB")
         return fights
 
-    def update_status(self, table: TableName, id: int, tried: bool, success: Optional[bool]) -> None:
+    def update_status(self, table: TableName, id: int, tried: bool, success: bool | None) -> None:
         query = (
             f"UPDATE {table} SET updated_at = :updated_at, tried = :tried, success = :success "
             "WHERE id = :id"
@@ -240,7 +236,12 @@ class LinksDB:
         fighter_ids = self.read_fighter_ids(unique_fighters)
         return new_fights, fighter_ids
 
-    def insert_fights(self, fights: Collection["Fight"], fighter_ids: dict["EventFighter", int]) -> None:
+    def insert_fights(
+        self,
+        fights: Collection["Fight"],
+        event_id: int,
+        fighter_ids: dict["EventFighter", int],
+    ) -> None:
         logger.info(f"Got {len(fights)} fights to insert into DB")
         query = (
             "INSERT INTO fight (link, event_id, fighter_1_id, fighter_2_id) "
@@ -249,7 +250,7 @@ class LinksDB:
         for fight in fights:
             params = {
                 "link": fight.link,
-                "event_id": fight.event_id,
+                "event_id": event_id,
                 "fighter_1_id": fighter_ids[fight.fighter_1],
                 "fighter_2_id": fighter_ids[fight.fighter_2],
             }
@@ -261,7 +262,7 @@ class LinksDB:
         for id in fighter_ids.values():
             self.update_status("fighter", id, False, None)
 
-    def update_fight_data(self, fights: Collection["Fight"]) -> None:
-        new_fights, fighter_ids = self.filter_fight_data(fights)
-        self.insert_fights(new_fights, fighter_ids)
+    def update_fight_data(self, event: "EventDetails") -> None:
+        new_fights, fighter_ids = self.filter_fight_data(event.fights)
+        self.insert_fights(new_fights, event.id, fighter_ids)
         self.update_fighters_status(fighter_ids)

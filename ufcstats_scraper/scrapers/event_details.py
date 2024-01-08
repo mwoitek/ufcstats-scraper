@@ -3,11 +3,11 @@ from json import dump
 from os import mkdir
 from sqlite3 import Error as SqliteError
 from time import sleep
-from typing import Any, Optional, get_args
+from typing import Any, get_args
 
 import requests
 from bs4 import BeautifulSoup, ResultSet, Tag
-from pydantic import PositiveFloat, PositiveInt, ValidationError, validate_call
+from pydantic import Field, PositiveFloat, PositiveInt, ValidationError, validate_call
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
@@ -47,6 +47,7 @@ class Fight(CustomModel):
 
 
 class Event(CustomModel):
+    id: int = Field(..., exclude=True)
     link: EventLink
     name: str
     fights: list[Fight]
@@ -61,7 +62,7 @@ class EventDetailsScraper:
         self.name = name
         self.db = db
         self.tried = False
-        self.success: Optional[bool] = None
+        self.success: bool | None = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
@@ -111,14 +112,14 @@ class EventDetailsScraper:
 
         return Fight.model_validate(data_dict)
 
-    def scrape(self) -> list[Fight]:
+    def scrape(self) -> Event:
         self.tried = True
         self.success = False
 
         self.get_soup()
         self.get_table_rows()
 
-        scraped_data: list[Fight] = []
+        fights: list[Fight] = []
         for row in self.rows:
             try:
                 fight = EventDetailsScraper.scrape_row(row)
@@ -126,12 +127,19 @@ class EventDetailsScraper:
                 logger.exception("Failed to scrape row")
                 logger.debug(f"Row: {row}")
                 continue
-            scraped_data.append(fight)
+            fights.append(fight)
 
-        if len(scraped_data) == 0:
+        if len(fights) == 0:
             raise NoScrapedDataError(self.link)
 
-        self.scraped_data = scraped_data
+        self.scraped_data = Event.model_validate(
+            {
+                "id": self.id,
+                "link": self.link,
+                "name": self.name,
+                "fights": fights,
+            }
+        )
         return self.scraped_data
 
     def save_json(self) -> None:
@@ -143,18 +151,9 @@ class EventDetailsScraper:
         except FileExistsError:
             logger.info(f"Directory {EventDetailsScraper.DATA_DIR} already exists")
 
-        event = Event.model_validate(
-            {
-                "link": self.link,
-                "name": self.name,
-                "fights": self.scraped_data,
-            }
-        )
-        out_data = event.model_dump(by_alias=True, exclude_none=True)
-
+        out_data = self.scraped_data.model_dump(by_alias=True, exclude_none=True)
         file_name = self.link.split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
-
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
@@ -199,7 +198,7 @@ def check_links_db() -> bool:
     return True
 
 
-def read_events(select: LinkSelection, limit: Optional[int] = None) -> list[DBEvent]:
+def read_events(select: LinkSelection, limit: int | None = None) -> list[DBEvent]:
     events: list[DBEvent] = []
 
     console.subtitle("EVENT LINKS")
@@ -232,7 +231,8 @@ def scrape_event(event: DBEvent) -> Event:
     try:
         scraper.scrape()
         console.success("Done!")
-        console.success(f"Scraped data for {len(scraper.scraped_data)} fights.")
+        num_fights = len(scraper.scraped_data.fights)
+        console.success(f"Scraped data for {num_fights} fights.")
     except ScraperError as exc_1:
         logger.exception("Failed to scrape event details")
         logger.debug(f"Event: {event}")
@@ -277,19 +277,13 @@ def scrape_event(event: DBEvent) -> Event:
         console.danger("Failed!")
         raise exc
 
-    return Event.model_validate(
-        {
-            "link": scraper.link,
-            "name": scraper.name,
-            "fights": scraper.scraped_data,
-        }
-    )
+    return scraper.scraped_data
 
 
 @validate_call
 def scrape_event_details(
     select: LinkSelection,
-    limit: Optional[PositiveInt] = None,
+    limit: PositiveInt | None = None,
     delay: PositiveFloat = config.default_delay,
 ) -> None:
     console.title("EVENT DETAILS")
@@ -335,8 +329,6 @@ def scrape_event_details(
 
     num_fights = sum(len(event.fights) for event in scraped_events)
     console.info(f"Scraped data for {num_fights} fights.")
-
-    # TODO: Save combined data
 
 
 if __name__ == "__main__":
