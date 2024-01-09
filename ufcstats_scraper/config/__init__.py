@@ -1,16 +1,15 @@
 from pathlib import Path
-from tomllib import TOMLDecodeError
-from tomllib import load
-from typing import Any
-from typing import Literal
-from typing import cast
+from tomllib import TOMLDecodeError, load
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel
-from pydantic import PositiveFloat
-from pydantic import ValidationError
-from pydantic import ValidationInfo
-from pydantic import ValidatorFunctionWrapHandler
-from pydantic import field_validator
+from pydantic import (
+    BaseModel,
+    PositiveFloat,
+    ValidationError,
+    ValidationInfo,
+    ValidatorFunctionWrapHandler,
+    field_validator,
+)
 
 # NOTE: Instead of importing, I'm repeating this definition. The goal is to
 # avoid problems with circular imports.

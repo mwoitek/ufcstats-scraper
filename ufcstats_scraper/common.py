@@ -1,15 +1,9 @@
 import logging
-from typing import Optional
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 from rich.console import Console
-from rich.progress import BarColumn
-from rich.progress import MofNCompleteColumn
-from rich.progress import Progress
-from rich.progress import TaskProgressColumn
-from rich.progress import TextColumn
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskProgressColumn, TextColumn
 from rich.theme import Theme
 
 import ufcstats_scraper.config as config
@@ -66,7 +60,7 @@ progress = Progress(
 
 
 class CustomLogger:
-    def __init__(self, name: str, file_name: Optional[str] = None) -> None:
+    def __init__(self, name: str, file_name: str | None = None) -> None:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
 
