@@ -1,10 +1,11 @@
 import datetime
 import re
 from argparse import ArgumentParser
+from collections.abc import Callable
 from json import dump
 from os import mkdir
 from sqlite3 import Error as SqliteError
-from typing import Any, Callable, Optional, Self
+from typing import Any, Self
 
 import requests
 from bs4 import BeautifulSoup, ResultSet, Tag
@@ -32,7 +33,7 @@ logger = CustomLogger(
 
 class Location(CustomModel):
     city: str
-    state: Optional[str] = None
+    state: str | None = None
     country: str
 
     @model_validator(mode="wrap")  # pyright: ignore

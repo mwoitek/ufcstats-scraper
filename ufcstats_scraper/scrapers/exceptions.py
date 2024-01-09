@@ -1,16 +1,14 @@
-from typing import Optional
-
 from pydantic import HttpUrl
 
 
 class ScraperError(Exception):
-    def __init__(self, message: Optional[str] = None) -> None:
+    def __init__(self, message: str | None = None) -> None:
         self.message = message
         super().__init__(self.message)
 
 
 class NoSoupError(ScraperError):
-    def __init__(self, link: Optional[str | HttpUrl] = None) -> None:
+    def __init__(self, link: str | HttpUrl | None = None) -> None:
         if link is None:
             message = "Cannot do scraping without the soup"
         else:
@@ -20,7 +18,7 @@ class NoSoupError(ScraperError):
 
 
 class MissingHTMLElementError(ScraperError):
-    def __init__(self, description: Optional[str] = None) -> None:
+    def __init__(self, description: str | None = None) -> None:
         message = "Failed to find necessary HTML element(s)"
         if description is not None:
             message = f"{message}: {description}"
@@ -29,7 +27,7 @@ class MissingHTMLElementError(ScraperError):
 
 
 class NoScrapedDataError(ScraperError):
-    def __init__(self, link: Optional[str | HttpUrl] = None) -> None:
+    def __init__(self, link: str | HttpUrl | None = None) -> None:
         if link is None:
             message = "Cannot perform this operation with no scraped data"
         else:

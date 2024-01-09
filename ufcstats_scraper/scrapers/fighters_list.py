@@ -4,7 +4,7 @@ from os import mkdir
 from sqlite3 import Error as SqliteError
 from string import ascii_lowercase
 from time import sleep
-from typing import Any, Optional, Self
+from typing import Any, Self
 from urllib.parse import urlencode
 
 import requests
@@ -21,9 +21,8 @@ from pydantic import (
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import CustomLogger, CustomModel
+from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
-from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.scrapers.common import CleanName, FighterLink, Stance
@@ -43,13 +42,13 @@ logger = CustomLogger(
 
 class Fighter(CustomModel):
     link: FighterLink
-    first_name: Optional[CleanName] = None
-    last_name: Optional[CleanName] = None
-    nickname: Optional[CleanName] = None
-    height: Optional[PositiveInt] = None
-    weight: Optional[PositiveInt] = None
-    reach: Optional[PositiveInt] = None
-    stance: Optional[Stance] = None
+    first_name: CleanName | None = None
+    last_name: CleanName | None = None
+    nickname: CleanName | None = None
+    height: PositiveInt | None = None
+    weight: PositiveInt | None = None
+    reach: PositiveInt | None = None
+    stance: Stance | None = None
     wins: NonNegativeInt
     losses: NonNegativeInt
     draws: NonNegativeInt

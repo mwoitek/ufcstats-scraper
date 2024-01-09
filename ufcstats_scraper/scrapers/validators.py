@@ -1,5 +1,6 @@
 import re
-from typing import Callable, Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 from pydantic import HttpUrl, ValidatorFunctionWrapHandler
 
@@ -15,7 +16,7 @@ def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl
     return validator
 
 
-def fill_height(height: Optional[str], handler: ValidatorFunctionWrapHandler) -> Optional[int]:
+def fill_height(height: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if height is None:
         return
     match = re.match(r"(\d{1})' (\d{1,2})\"", height.strip())
@@ -24,7 +25,7 @@ def fill_height(height: Optional[str], handler: ValidatorFunctionWrapHandler) ->
     return handler(feet * 12 + inches)
 
 
-def fill_weight(weight: Optional[str], handler: ValidatorFunctionWrapHandler) -> Optional[int]:
+def fill_weight(weight: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if weight is None:
         return
     match = re.match(r"(\d+) lbs[.]", weight.strip())
@@ -32,7 +33,7 @@ def fill_weight(weight: Optional[str], handler: ValidatorFunctionWrapHandler) ->
     return handler(int(match.group(1)))
 
 
-def fill_reach(reach: Optional[str], handler: ValidatorFunctionWrapHandler) -> Optional[int]:
+def fill_reach(reach: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if reach is None:
         return
     match = re.match(r"(\d+)([.]0)?\"", reach.strip())
@@ -40,7 +41,7 @@ def fill_reach(reach: Optional[str], handler: ValidatorFunctionWrapHandler) -> O
     return handler(int(match.group(1)))
 
 
-def fill_ratio(percent: Optional[str], handler: ValidatorFunctionWrapHandler) -> Optional[float]:
+def fill_ratio(percent: str | None, handler: ValidatorFunctionWrapHandler) -> float | None:
     if percent is None:
         return
     match = re.match(r"(\d+)%", percent.strip())
