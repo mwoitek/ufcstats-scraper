@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Literal
-from typing import get_args
+from typing import Literal, get_args
 
 import ufcstats_scraper.config as config
 

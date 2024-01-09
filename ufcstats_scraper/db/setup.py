@@ -1,15 +1,11 @@
 import sqlite3
 from argparse import ArgumentParser
 
-from pydantic import ValidationError
-from pydantic import validate_call
+from pydantic import ValidationError, validate_call
 
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.checks import is_db_setup
-from ufcstats_scraper.db.common import DB_PATH
-from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
-from ufcstats_scraper.db.common import TABLES
-from ufcstats_scraper.db.common import TableName
+from ufcstats_scraper.db.common import DB_PATH, SQL_SCRIPTS_DIR, TABLES, TableName
 
 
 class DBCreator:

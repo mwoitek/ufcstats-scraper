@@ -2,10 +2,7 @@ import sqlite3
 
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.db.common import DB_PATH
-from ufcstats_scraper.db.common import SQL_SCRIPTS_DIR
-from ufcstats_scraper.db.common import TABLES
-from ufcstats_scraper.db.common import TableName
+from ufcstats_scraper.db.common import DB_PATH, SQL_SCRIPTS_DIR, TABLES, TableName
 
 logger = CustomLogger(
     name="db_checks",
