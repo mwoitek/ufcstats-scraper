@@ -1,23 +1,22 @@
 import re
 from argparse import ArgumentParser
-from datetime import datetime
+from collections.abc import Callable
+from datetime import date, datetime
 from json import dump
 from os import mkdir
-from pathlib import Path
 from sqlite3 import Error as SqliteError
 from time import sleep
-from typing import Annotated, Any, ClassVar, Self, cast, get_args
+from typing import Any, Self, cast, get_args
 
 import requests
 from bs4 import BeautifulSoup, ResultSet, Tag
 from pydantic import (
-    Field,
     NonNegativeFloat,
     NonNegativeInt,
     PositiveFloat,
     PositiveInt,
     ValidationError,
-    ValidationInfo,
+    ValidatorFunctionWrapHandler,
     field_validator,
     model_validator,
     validate_call,
@@ -37,7 +36,6 @@ from ufcstats_scraper.scrapers.common import (
     CustomDate,
     FighterLink,
     PercRatio,
-    PercStr,
     Stance,
     fix_consecutive_spaces,
 )
@@ -62,81 +60,66 @@ def to_snake_case(s: str) -> str:
 class Header(CustomModel):
     name: CleanName
     nickname: CleanName | None = None
-    record_str: str = Field(..., exclude=True, pattern=r"Record: \d+-\d+-\d+( [(]\d+ NC[)])?")
-    wins: NonNegativeInt | None = None
-    losses: NonNegativeInt | None = None
-    draws: NonNegativeInt | None = None
-    no_contests: NonNegativeInt | None = None
+    wins: NonNegativeInt
+    losses: NonNegativeInt
+    draws: NonNegativeInt
+    no_contests: NonNegativeInt
 
-    @model_validator(mode="after")
-    def fill_record(self) -> Self:
+    @model_validator(mode="wrap")  # pyright: ignore
+    def fill_record(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        if not isinstance(self, dict):
+            return self
+
         pattern = r"Record: (?P<wins>\d+)-(?P<losses>\d+)-(?P<draws>\d+)( \((?P<noContests>\d+) NC\))?"
-        match = re.match(pattern, self.record_str, flags=re.IGNORECASE)
-        match = cast(re.Match, match)
+        match = re.match(pattern, self["record"].strip(), flags=re.IGNORECASE)
+        assert isinstance(match, re.Match)
 
         record_dict = {k: int(v) for k, v in match.groupdict(default="0").items()}
         record_dict["no_contests"] = record_dict.pop("noContests")
 
-        for k, v in record_dict.items():
-            setattr(self, k, v)
-        return self
+        self.update(record_dict)
+        return handler(self)
 
 
 class PersonalInfo(CustomModel):
-    height_str: Annotated[str, Field(pattern="\\d{1}' \\d{1,2}\\\"")] | None = Field(
-        default=None, exclude=True
-    )
-    height: PositiveInt | None = Field(default=None, validate_default=True)
-    weight_str: Annotated[str, Field(pattern="\\d+ lbs[.]")] | None = Field(default=None, exclude=True)
-    weight: PositiveInt | None = Field(default=None, validate_default=True)
-    reach_str: Annotated[str, Field(pattern='\\d+\\"')] | None = Field(default=None, exclude=True)
-    reach: PositiveInt | None = Field(default=None, validate_default=True)
+    height: PositiveInt | None = None
+    weight: PositiveInt | None = None
+    reach: PositiveInt | None = None
     stance: Stance | None = None
-    date_of_birth_str: Annotated[str, Field(pattern="[A-Za-z]{3} \\d{2}, \\d{4}")] | None = Field(
-        default=None, exclude=True
-    )
-    date_of_birth: CustomDate | None = Field(default=None, validate_default=True)
+    date_of_birth: CustomDate | None = None
 
-    _fill_height = field_validator("height")(fill_height)
-    _fill_weight = field_validator("weight")(fill_weight)
-    _fill_reach = field_validator("reach")(fill_reach)
+    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore
+    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore
+    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore
 
-    @field_validator("date_of_birth")
+    @field_validator("date_of_birth", mode="wrap")  # pyright: ignore
     @classmethod
-    def fill_date_of_birth(
+    def convert_date_of_birth(
         cls,
-        date_of_birth: CustomDate | None,
-        info: ValidationInfo,
-    ) -> CustomDate | None:
-        if date_of_birth is not None:
-            return date_of_birth
-
-        date_of_birth_str = info.data.get("date_of_birth_str")
-        if not isinstance(date_of_birth_str, str):
+        date_of_birth: str | None,
+        handler: ValidatorFunctionWrapHandler,
+    ) -> date | None:
+        if date_of_birth is None:
             return
-
-        date_of_birth = datetime.strptime(date_of_birth_str, "%b %d, %Y").date()
-        return date_of_birth
+        converted = datetime.strptime(date_of_birth.strip(), "%b %d, %Y").date()
+        return handler(converted)
 
 
 class CareerStats(CustomModel):
     slpm: NonNegativeFloat
-    str_acc_str: PercStr = Field(..., exclude=True)
-    str_acc: PercRatio | None = Field(default=None, validate_default=True)
+    str_acc: PercRatio
     sapm: NonNegativeFloat
-    str_def_str: PercStr = Field(..., exclude=True)
-    str_def: PercRatio | None = Field(default=None, validate_default=True)
+    str_def: PercRatio
     td_avg: NonNegativeFloat
-    td_acc_str: PercStr = Field(..., exclude=True)
-    td_acc: PercRatio | None = Field(default=None, validate_default=True)
-    td_def_str: PercStr = Field(..., exclude=True)
-    td_def: PercRatio | None = Field(default=None, validate_default=True)
+    td_acc: PercRatio
+    td_def: PercRatio
     sub_avg: NonNegativeFloat
 
-    _fill_ratio = field_validator("str_acc", "str_def", "td_acc", "td_def")(fill_ratio)
+    _fill_ratio = field_validator("str_acc", "str_def", "td_acc", "td_def", mode="wrap")(fill_ratio)  # pyright: ignore
 
 
 class Fighter(CustomModel):
+    link: FighterLink
     header: Header
     personal_info: PersonalInfo | None
     career_stats: CareerStats | None
@@ -146,10 +129,8 @@ class Fighter(CustomModel):
     def check_personal_info(cls, personal_info: PersonalInfo | None) -> PersonalInfo | None:
         if personal_info is None:
             return
-
         if len(personal_info.model_dump(exclude_none=True)) == 0:
             return
-
         return personal_info
 
     @field_validator("career_stats")
@@ -157,18 +138,18 @@ class Fighter(CustomModel):
     def check_career_stats(cls, career_stats: CareerStats | None) -> CareerStats | None:
         if career_stats is None:
             return
-
         # For some fighters, every career stat is equal to zero. This is
         # garbage data, and will be disregarded.
         if all(stat == 0.0 for stat in career_stats.model_dump().values()):
             return
-
         return career_stats
 
     def to_dict(self, redundant=True) -> dict[str, Any]:
         flat_dict: dict[str, Any] = {}
 
         orig_dict = self.model_dump(by_alias=True, exclude_none=True)
+        flat_dict["link"] = orig_dict.pop("link")
+
         for nested_dict in orig_dict.values():
             nested_dict = cast(dict[str, Any], nested_dict)
             flat_dict.update(nested_dict)
@@ -184,35 +165,31 @@ class Fighter(CustomModel):
         return flat_dict
 
 
-class FighterDetailsScraper(CustomModel):
-    DATA_DIR: ClassVar[Path] = config.data_dir / "fighter_details"
+class FighterDetailsScraper:
+    DATA_DIR = config.data_dir / "fighter_details"
 
-    id: int
-    link: FighterLink
-    name: str
-    db: LinksDB
-
-    soup: BeautifulSoup | None = None
-    scraped_data: Fighter | None = None
-
-    tried: bool = False
-    success: bool | None = None
+    def __init__(self, id: int, link: str, name: str, db: LinksDB) -> None:
+        self.id = id
+        self.link = link
+        self.name = name
+        self.db = db
+        self.tried = False
+        self.success: bool | None = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
-            response = requests.get(str(self.link))
+            response = requests.get(self.link)
         except RequestException as exc:
             raise NoSoupError(self.link) from exc
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(self.link)
 
-        html = response.text
-        self.soup = BeautifulSoup(html, "lxml")
+        self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
 
     def scrape_header(self) -> Header:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         # Scrape full name
@@ -226,19 +203,19 @@ class FighterDetailsScraper(CustomModel):
         if not isinstance(nickname_p, Tag):
             raise MissingHTMLElementError("Nickname paragraph (p.b-content__Nickname)")
         data_dict["nickname"] = nickname_p.get_text().strip()
-        if data_dict["nickname"] == "":
+        if not data_dict["nickname"]:
             del data_dict["nickname"]
 
         # Scrape record
         record_span = self.soup.find("span", class_="b-content__title-record")
         if not isinstance(record_span, Tag):
             raise MissingHTMLElementError("Record span (span.b-content__title-record)")
-        data_dict["record_str"] = record_span.get_text()
+        data_dict["record"] = record_span.get_text()
 
         return Header.model_validate(data_dict)
 
     def scrape_personal_info(self) -> PersonalInfo:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         box_list = self.soup.find("ul", class_="b-list__box-list")
@@ -251,22 +228,17 @@ class FighterDetailsScraper(CustomModel):
 
         data_dict: dict[str, Any] = {}
 
-        # Actual scraping logic
         for item in items:
             text = fix_consecutive_spaces(item.get_text())
             field_name, field_value = (p.strip().strip("-") for p in text.split(": "))
-            if field_value != "":
+            if field_value:
                 data_dict[field_name.lower()] = field_value
-
-        # "Fix" field names
-        for field_name in ["height", "weight", "reach"]:
-            data_dict[f"{field_name}_str"] = data_dict.pop(field_name, None)
-        data_dict["date_of_birth_str"] = data_dict.pop("dob", None)
+        data_dict["date_of_birth"] = data_dict.pop("dob", None)
 
         return PersonalInfo.model_validate(data_dict)
 
     def scrape_career_stats(self) -> CareerStats:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         box = self.soup.find("div", class_="b-list__info-box-left clearfix")
@@ -279,18 +251,13 @@ class FighterDetailsScraper(CustomModel):
 
         data_dict: dict[str, Any] = {}
 
-        # Actual scraping logic
         for item in items:
             text = fix_consecutive_spaces(item.get_text()).strip()
             # One of the li's is empty. This deals with this case:
-            if text == "":
+            if not text:
                 continue
             field_name, field_value = text.split(": ")
             data_dict[to_snake_case(field_name)] = field_value
-
-        # "Fix" field names
-        for field_name in ["str_acc", "str_def", "td_acc", "td_def"]:
-            data_dict[f"{field_name}_str"] = data_dict.pop(field_name)
 
         return CareerStats.model_validate(data_dict)
 
@@ -302,6 +269,7 @@ class FighterDetailsScraper(CustomModel):
 
         try:
             data_dict: dict[str, Any] = {
+                "link": self.link,
                 "header": self.scrape_header(),
                 "personal_info": self.scrape_personal_info(),
                 "career_stats": self.scrape_career_stats(),
@@ -313,7 +281,7 @@ class FighterDetailsScraper(CustomModel):
         return self.scraped_data
 
     def save_json(self, redundant=True) -> None:
-        if self.scraped_data is None:
+        if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
         try:
@@ -322,7 +290,7 @@ class FighterDetailsScraper(CustomModel):
             logger.info(f"Directory {FighterDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.to_dict(redundant=redundant)
-        file_name = str(self.link).split("/")[-1]
+        file_name = self.link.split("/")[-1]
         out_file = FighterDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
@@ -356,10 +324,7 @@ def check_links_db() -> bool:
     return True
 
 
-def read_fighters(
-    select: LinkSelection,
-    limit: PositiveInt | None = None,
-) -> list[DBFighter]:
+def read_fighters(select: LinkSelection, limit: int | None = None) -> list[DBFighter]:
     fighters: list[DBFighter] = []
 
     console.subtitle("FIGHTER LINKS")
@@ -388,15 +353,7 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
         console.danger("Failed!")
         raise exc
 
-    data_dict = dict(db=db, **fighter._asdict())
-    try:
-        scraper = FighterDetailsScraper.model_validate(data_dict)
-    except ValidationError as exc:
-        logger.exception("Failed to create scraper object")
-        logger.debug(f"Scraper args: {data_dict}")
-        console.danger("Failed!")
-        raise exc
-
+    scraper = FighterDetailsScraper(db=db, **fighter._asdict())
     try:
         scraper.scrape()
         console.success("Done!")
@@ -435,7 +392,6 @@ def scrape_fighter(fighter: DBFighter) -> Fighter:
             console.danger("Failed!")
             raise exc
 
-    scraper.scraped_data = cast(Fighter, scraper.scraped_data)
     return scraper.scraped_data
 
 
@@ -457,9 +413,10 @@ def scrape_fighter_details(
         return
     console.success(f"Got {num_fighters} fighter(s) to scrape.")
 
+    ok_count = 0
+
     with progress:
         task = progress.add_task("Scraping fighters...", total=num_fighters)
-        ok_count = 0
 
         for i, fighter in enumerate(fighters, start=1):
             try:
@@ -481,8 +438,8 @@ def scrape_fighter_details(
         console.danger("No data was scraped.")
         raise NoScrapedDataError("http://ufcstats.com/fighter-details/")
 
-    count_str = "all fighters" if num_fighters == ok_count else f"{ok_count} out of {num_fighters} fighter(s)"
-    console.info(f"Successfully scraped data for {count_str}.")
+    msg_count = "all fighters" if num_fighters == ok_count else f"{ok_count} out of {num_fighters} fighter(s)"
+    console.info(f"Successfully scraped data for {msg_count}.")
 
 
 if __name__ == "__main__":
