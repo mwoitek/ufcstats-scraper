@@ -54,7 +54,7 @@ progress = Progress(
     MofNCompleteColumn(),
     TaskProgressColumn(),
     console=custom_console.console,
-    refresh_per_second=1.0,
+    refresh_per_second=2.0,
     transient=True,
 )
 

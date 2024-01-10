@@ -70,7 +70,7 @@ class Fighter(CustomModel):
 
     @model_validator(mode="after")
     def check_name(self) -> Self:
-        if self.name == "":
+        if not self.name:
             raise ValueError("fighter has no name")
         return self
 
@@ -138,7 +138,7 @@ class FightersListScraper:
             "draws",
         ]
         cols_text = map(lambda c: c.get_text().strip().strip("-"), cols[:-1])
-        pairs = filter(lambda p: p[1] != "", zip(FIELDS, cols_text))
+        pairs = filter(lambda p: p[1], zip(FIELDS, cols_text, strict=True))
         data_dict.update(pairs)
 
         # Scrape current_champion

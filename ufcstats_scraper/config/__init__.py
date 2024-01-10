@@ -18,11 +18,7 @@ LinkSelection = Literal["all", "failed", "untried"]
 LevelType = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
-def fix_invalid(
-    value: Any,
-    handler: ValidatorFunctionWrapHandler,
-    info: ValidationInfo,
-) -> Any:
+def invalid_to_default(value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo) -> Any:
     try:
         return handler(value)
     except ValidationError:
@@ -34,23 +30,20 @@ def fix_invalid(
 class Defaults(BaseModel):
     delay: PositiveFloat = 1.0
     select: LinkSelection = "untried"
-
-    _fix_invalid = field_validator("*", mode="wrap")(fix_invalid)
+    _invalid_to_default = field_validator("*", mode="wrap")(invalid_to_default)
 
 
 class Directories(BaseModel):
     data: Path = Path.cwd() / "data"
     log: Path = Path.cwd() / "log"
-
-    _fix_invalid = field_validator("*", mode="wrap")(fix_invalid)
+    _invalid_to_default = field_validator("*", mode="wrap")(invalid_to_default)
 
 
 class Logger(BaseModel):
     enabled: bool = False
     level: LevelType = "DEBUG"
     single_file: bool = True
-
-    _fix_invalid = field_validator("*", mode="wrap")(fix_invalid)
+    _invalid_to_default = field_validator("*", mode="wrap")(invalid_to_default)
 
 
 class Config(BaseModel):
