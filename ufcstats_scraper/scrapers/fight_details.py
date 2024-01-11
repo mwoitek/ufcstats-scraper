@@ -1,57 +1,46 @@
 import re
-import sqlite3
 from argparse import ArgumentParser
+from collections.abc import Callable
 from datetime import timedelta
 from itertools import chain
 from json import dump
 from math import isclose
 from os import mkdir
-from pathlib import Path
+from sqlite3 import Error as SqliteError
 from time import sleep
-from typing import Annotated
-from typing import Any
-from typing import ClassVar
-from typing import Literal
-from typing import Optional
-from typing import Self
-from typing import cast
-from typing import get_args
+from typing import Annotated, Any, Literal, Self, cast, get_args
 
 import requests
-from bs4 import BeautifulSoup
-from bs4 import ResultSet
-from bs4 import Tag
+from bs4 import BeautifulSoup, ResultSet, Tag
 from more_itertools import chunked
-from pydantic import Field
-from pydantic import NonNegativeInt
-from pydantic import PositiveInt
-from pydantic import ValidationError
-from pydantic import ValidationInfo
-from pydantic import field_validator
-from pydantic import model_serializer
-from pydantic import model_validator
-from pydantic import validate_call
+from pydantic import (
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+    validate_call,
+)
 from pydantic.functional_serializers import PlainSerializer
 from requests.exceptions import RequestException
 
 import ufcstats_scraper.config as config
-from ufcstats_scraper.common import CustomLogger
-from ufcstats_scraper.common import CustomModel
+from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
-from ufcstats_scraper.common import progress
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
-from ufcstats_scraper.scrapers.common import CleanName
-from ufcstats_scraper.scrapers.common import FightLink
-from ufcstats_scraper.scrapers.common import PercRatio
-from ufcstats_scraper.scrapers.common import PercStr
-from ufcstats_scraper.scrapers.common import fix_consecutive_spaces
-from ufcstats_scraper.scrapers.exceptions import MissingHTMLElementError
-from ufcstats_scraper.scrapers.exceptions import NoScrapedDataError
-from ufcstats_scraper.scrapers.exceptions import NoSoupError
-from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.common import CleanName, PercRatio, fix_consecutive_spaces
+from ufcstats_scraper.scrapers.exceptions import (
+    MissingHTMLElementError,
+    NoScrapedDataError,
+    NoSoupError,
+    ScraperError,
+)
 from ufcstats_scraper.scrapers.validators import fill_ratio
 
 BonusType = Literal[
@@ -81,8 +70,12 @@ WeightClassType = Literal[
     "Light Heavyweight",
     "Heavyweight",
 ]
-CustomTimeDelta = Annotated[timedelta, PlainSerializer(lambda d: int(d.total_seconds()), return_type=int)]
+CustomTimeDelta = Annotated[
+    timedelta,
+    PlainSerializer(lambda d: int(d.total_seconds()), return_type=int),
+]
 
+WEIGHT_CLASS_PATTERN = "|".join(get_args(WeightClassType))
 logger = CustomLogger(
     name="fight_details",
     file_name="ufcstats_scraper" if config.logger_single_file else None,
@@ -90,104 +83,108 @@ logger = CustomLogger(
 
 
 class Result(CustomModel):
-    fighter_1_str: str = Field(..., exclude=True, max_length=2)
-    fighter_1: Optional[ResultType] = Field(default=None, validate_default=True)
-    fighter_2_str: str = Field(..., exclude=True, max_length=2)
-    fighter_2: Optional[ResultType] = Field(default=None, validate_default=True)
+    fighter_1: ResultType
+    fighter_2: ResultType
 
-    @field_validator("fighter_1", "fighter_2")
+    @field_validator("fighter_1", "fighter_2", mode="wrap")  # pyright: ignore
     @classmethod
-    def fill_result(cls, result: Optional[ResultType], info: ValidationInfo) -> Optional[ResultType]:
-        if result is not None:
-            return result
-
-        raw_result = info.data.get(f"{info.field_name}_str")
-        raw_result = cast(str, raw_result)
-
+    def fill_result(cls, raw_result: str, handler: ValidatorFunctionWrapHandler) -> ResultType:
+        raw_result = raw_result.strip()
         match raw_result:
             case "W":
-                return "Win"
+                result = "Win"
             case "L":
-                return "Loss"
+                result = "Loss"
             case "D":
-                return "Draw"
+                result = "Draw"
             case "NC":
-                return "No contest"
+                result = "No contest"
             case _:
                 raise ValueError(f"invalid result: {raw_result}")
-
-
-class Scorecard(CustomModel):
-    score_str: str = Field(..., exclude=True, pattern=r"\D+\d+ - \d+\. ?")
-    judge: Optional[CleanName] = None
-    fighter_1: Optional[PositiveInt] = None
-    fighter_2: Optional[PositiveInt] = None
+        return handler(result)
 
     @model_validator(mode="after")
-    def parse_score_str(self) -> Self:
-        match = re.match(r"(\D+)(\d+) - (\d+)\. ?", self.score_str)
-        match = cast(re.Match, match)
-
-        judge = match.group(1)
-        judge = cast(str, judge)
-        judge = fix_consecutive_spaces(judge.strip())
-        assert len(judge) > 0, "judge's name cannot be empty"
-        self.judge = judge
-
-        for i in [1, 2]:
-            score = int(match.group(i + 1))
-            setattr(self, f"fighter_{i}", score)
-
+    def check_consistency(self) -> Self:
+        match self.fighter_1:
+            case "Win":
+                assert self.fighter_2 == "Loss", "results are inconsistent"
+            case "Loss":
+                assert self.fighter_2 == "Win", "results are inconsistent"
+            case "Draw":
+                assert self.fighter_2 == "Draw", "results are inconsistent"
+            case "No contest":
+                assert self.fighter_2 == "No contest", "results are inconsistent"
         return self
 
 
+class Scorecard(CustomModel):
+    judge: CleanName
+    fighter_1: PositiveInt
+    fighter_2: PositiveInt
+
+    @model_validator(mode="wrap")  # pyright: ignore
+    def parse_score(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        if not isinstance(self, dict):
+            return self
+
+        pattern = r"(?P<judge>\D+)(?P<fighter_1>\d+) - (?P<fighter_2>\d+)\. ?"
+        match = re.match(pattern, self["score_str"])
+        assert isinstance(match, re.Match)
+
+        self.update(match.groupdict())
+        return handler(self)
+
+
 class Box(CustomModel):
-    description: str = Field(
-        ...,
-        exclude=True,
-        pattern=r"(UFC )?(Interim )?(Women's )?[A-Za-z ]+?(Title )?Bout",
-    )
-    bonus_links: list[str] = Field(..., exclude=True)
-    bonuses: Optional[list[BonusType]] = Field(default=None, validate_default=True)
-    sex: Literal["Female", "Male"] = "Male"
-    weight_class: Optional[WeightClassType] = None
     title_bout: bool = False
-    interim_title: Optional[bool] = None
+    interim_title: bool | None = None
+    bonuses: list[BonusType] | None = None
+    sex: Literal["Female", "Male"] = "Male"
+    weight_class: WeightClassType
     method: MethodType
     round: int = Field(..., ge=1, le=5)
-    time_str: str = Field(..., exclude=True, pattern=r"\d{1,2}:\d{2}")
-    time: Optional[CustomTimeDelta] = Field(default=None, validate_default=True)
-    time_format: str = Field(..., pattern=r"(\d{1} Rnd \((\d{1}-)+\d{1}\))|(No Time Limit)")
+    time: CustomTimeDelta
+    time_format: str
     referee: CleanName
-    details_str: str = Field(..., exclude=True)
-    details: Optional[str] = None
-    scorecards: Optional[list[Scorecard]] = None
+    details: str | None
+    scorecards: list[Scorecard] | None
 
-    @field_validator("bonuses")
+    @model_validator(mode="wrap")  # pyright: ignore
+    def parse_description(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        if not isinstance(self, dict):
+            return self
+        description = cast(str, self["description"]).lower()
+        if self["title_bout"]:
+            self["interim_title"] = "interim" in description
+        self["sex"] = "Female" if "women" in description else "Male"
+        match = re.search(WEIGHT_CLASS_PATTERN, description, flags=re.IGNORECASE)
+        self["weight_class"] = "Open Weight" if match is None else match.group(0).title()
+        return handler(self)
+
+    @model_validator(mode="wrap")  # pyright: ignore
+    def parse_details(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        if not isinstance(self, dict):
+            return self
+        details = cast(str, self.pop("details"))
+        matches = re.findall(r"\D+\d+ - \d+\. ?", details)
+        matches = cast(list[str], matches)
+        if len(matches) == 0:
+            self["details"] = details.capitalize()
+        else:
+            self["scorecards"] = [Scorecard.model_validate({"score_str": match}) for match in matches]
+        return handler(self)
+
+    @field_validator("bonuses", mode="wrap")  # pyright: ignore
     @classmethod
     def fill_bonuses(
         cls,
-        bonuses: Optional[list[BonusType]],
-        info: ValidationInfo,
-    ) -> Optional[list[BonusType]]:
-        if bonuses is not None:
-            return bonuses
-
-        bonus_links = info.data.get("bonus_links")
-        bonus_links = cast(list[str], bonus_links)
-
+        img_names: list[str],
+        handler: ValidatorFunctionWrapHandler,
+    ) -> list[BonusType] | None:
+        if len(img_names) == 0:
+            return
         bonuses = []
-
-        for link in bonus_links:
-            if link.endswith("belt.png"):
-                continue
-
-            match = re.search(r"[^/]+/([a-z]+)\.png", link)
-            match = cast(re.Match, match)
-
-            bonus = match.group(1)
-            bonus = cast(str, bonus)
-
+        for bonus in map(lambda n: n.split(".")[0], img_names):
             match bonus:
                 case "fight":
                     bonuses.append("Fight of the Night")
@@ -199,70 +196,15 @@ class Box(CustomModel):
                     bonuses.append("KO of the Night")
                 case _:
                     raise ValueError(f"invalid bonus: {bonus}")
+        return handler(bonuses)
 
-        return bonuses
-
-    @field_validator("time")
+    @field_validator("time", mode="wrap")  # pyright: ignore
     @classmethod
-    def fill_time(cls, time: Optional[CustomTimeDelta], info: ValidationInfo) -> Optional[CustomTimeDelta]:
-        if time is not None:
-            return time
-
-        time_str = info.data.get("time_str")
-        time_str = cast(str, time_str)
-
-        match = re.match(r"(\d{1,2}):(\d{2})", time_str)
-        match = cast(re.Match, match)
-
-        time = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
-        return time
-
-    @field_validator("time_format")
-    @classmethod
-    def transform_time_format(cls, time_format: str) -> str:
-        pattern = r"(\d{1}) Rnd \((\d{1}-)+(\d{1})\)"
-        match = re.match(pattern, time_format, flags=re.IGNORECASE)
-
-        if match is None:
-            return time_format.capitalize()
-
-        num_rounds = int(match.group(1))
-        minutes = int(match.group(3))
-
-        time_format = f"{num_rounds} {minutes}-minute rounds"
-        return time_format
-
-    @model_validator(mode="after")
-    def parse_description(self) -> Self:
-        pattern = r"(UFC )?(Interim )?(Women's )?([A-Za-z ]+?)(Title )?Bout"
-        match = re.match(pattern, self.description, flags=re.IGNORECASE)
-        match = cast(re.Match, match)
-
-        self.sex = "Female" if match.group(3) is not None else "Male"
-
-        weight_class = match.group(4)
-        weight_class = cast(str, weight_class)
-        weight_class = fix_consecutive_spaces(weight_class.strip().title())
-        assert weight_class in get_args(WeightClassType), f"invalid weight class: {weight_class}"
-        self.weight_class = weight_class  # pyright: ignore
-
-        self.title_bout = match.group(5) is not None
-        if self.title_bout:
-            self.interim_title = match.group(2) is not None
-
-        return self
-
-    @model_validator(mode="after")
-    def parse_details_str(self) -> Self:
-        matches = re.findall(r"\D+\d+ - \d+\. ?", self.details_str)
-        matches = cast(list[str], matches)
-
-        if len(matches) == 0:
-            self.details = fix_consecutive_spaces(self.details_str.capitalize())
-        else:
-            self.scorecards = [Scorecard(score_str=match) for match in matches]
-
-        return self
+    def convert_time(cls, time: str, handler: ValidatorFunctionWrapHandler) -> timedelta:
+        match = re.match(r"(\d{1,2}):(\d{2})", time)
+        assert isinstance(match, re.Match)
+        converted = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
+        return handler(converted)
 
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
@@ -276,29 +218,36 @@ class Box(CustomModel):
 
 
 class Count(CustomModel):
-    count_str: str = Field(..., exclude=True, pattern=r"\d+ of \d+")
-    landed: Optional[NonNegativeInt] = None
-    attempted: Optional[NonNegativeInt] = None
+    landed: NonNegativeInt
+    attempted: NonNegativeInt
 
-    @model_validator(mode="after")
-    def parse_count_str(self) -> Self:
-        match = re.match(r"(\d+) of (\d+)", self.count_str)
-        match = cast(re.Match, match)
+    @model_validator(mode="wrap")  # pyright: ignore
+    def parse_count(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
+        if not isinstance(self, dict):
+            return self
 
-        landed = int(match.group(1))
-        attempted = int(match.group(2))
-        assert landed <= attempted, "'landed' cannot be greater than 'attempted'"
+        if "landed" in self and "attempted" in self:
+            return handler(self)
 
-        self.landed = landed
-        self.attempted = attempted
+        count_str = cast(str, self["count_str"])
+        match = re.match(r"(?P<landed>\d+) of (?P<attempted>\d+)", count_str)
+        assert isinstance(match, re.Match)
 
-        return self
+        data_dict = {k: int(v) for k, v in match.groupdict().items()}
+        assert data_dict["landed"] <= data_dict["attempted"], "'landed' cannot be greater than 'attempted'"
+
+        self.update(data_dict)
+        return handler(self)
+
+    def __add__(self, other: "Count") -> "Count":
+        landed = self.landed + other.landed
+        attempted = self.attempted + other.attempted
+        return Count(landed=landed, attempted=attempted)
 
 
 class FighterSignificantStrikes(CustomModel):
     total: Count
-    percentage_str: Optional[PercStr] = Field(default=None, exclude=True)
-    percentage: Optional[PercRatio] = Field(default=None, validate_default=True)
+    percentage: PercRatio | None
     head: Count
     body: Count
     leg: Count
@@ -306,35 +255,26 @@ class FighterSignificantStrikes(CustomModel):
     clinch: Count
     ground: Count
 
-    _fill_ratio = field_validator("percentage")(fill_ratio)
+    _fill_ratio = field_validator("percentage", mode="wrap")(fill_ratio)  # pyright: ignore
 
     @model_validator(mode="after")
     def check_totals(self) -> Self:
-        FIELDS = [["head", "body", "leg"], ["distance", "clinch", "ground"]]
-
-        for group in FIELDS:
-            total_landed = 0
-            total_attempted = 0
-
-            for field in group:
-                count = getattr(self, field)
-                count = cast(Count, count)
-
-                total_landed += cast(int, count.landed)
-                total_attempted += cast(int, count.attempted)
-
-            assert total_landed == self.total.landed, "total landed is inconsistent"
-            assert total_attempted == self.total.attempted, "total attempted is inconsistent"
-
+        for group in [["head", "body", "leg"], ["distance", "clinch", "ground"]]:
+            total_count = sum(
+                (cast(Count, getattr(self, field)) for field in group),
+                start=Count(landed=0, attempted=0),
+            )
+            assert total_count.landed == self.total.landed, "total landed is inconsistent"
+            assert total_count.attempted == self.total.attempted, "total attempted is inconsistent"
         return self
 
     @model_validator(mode="after")
     def check_percentage(self) -> Self:
-        total_landed = cast(int, self.total.landed)
-        total_attempted = cast(int, self.total.attempted)
+        total_landed = self.total.landed
+        total_attempted = self.total.attempted
 
         if total_attempted == 0:
-            assert total_landed == 0, "'total_landed' and 'total_attempted' are inconsistent"
+            assert total_landed == 0, "total landed and total attempted are inconsistent"
             assert self.percentage is None, "percentage should be undefined"
             return self
 
@@ -387,37 +327,41 @@ class Fight(CustomModel):
         return data_dict
 
 
-class FightDetailsScraper(CustomModel):
-    DATA_DIR: ClassVar[Path] = config.data_dir / "fight_details"
+class FightDetailsScraper:
+    DATA_DIR = config.data_dir / "fight_details"
 
-    id: int
-    link: FightLink
-    event_name: str
-    fighter_1_name: str
-    fighter_2_name: str
-    db: LinksDB
-
-    soup: Optional[BeautifulSoup] = None
-    scraped_data: Optional[Fight] = None
-
-    tried: bool = False
-    success: Optional[bool] = None
+    def __init__(
+        self,
+        id: int,
+        link: str,
+        event_name: str,
+        fighter_1_name: str,
+        fighter_2_name: str,
+        db: LinksDB,
+    ) -> None:
+        self.id = id
+        self.link = link
+        self.event_name = event_name
+        self.fighter_1_name = fighter_1_name
+        self.fighter_2_name = fighter_2_name
+        self.db = db
+        self.tried = False
+        self.success: bool | None = None
 
     def get_soup(self) -> BeautifulSoup:
         try:
-            response = requests.get(str(self.link))
+            response = requests.get(self.link)
         except RequestException as exc:
             raise NoSoupError(self.link) from exc
 
         if response.status_code != requests.codes["ok"]:
             raise NoSoupError(self.link)
 
-        html = response.text
-        self.soup = BeautifulSoup(html, "lxml")
+        self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
 
     def scrape_result(self) -> Result:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         div = self.soup.find("div", class_="b-fight-details__persons")
@@ -428,10 +372,11 @@ class FightDetailsScraper(CustomModel):
         if len(is_) != 2:
             raise MissingHTMLElementError("Idiomatic tags (i.b-fight-details__person-status)")
 
-        return Result(fighter_1_str=is_[0].get_text(), fighter_2_str=is_[1].get_text())
+        data_dict = {"fighter_1": is_[0].get_text(), "fighter_2": is_[1].get_text()}
+        return Result.model_validate(data_dict)
 
     def scrape_box(self) -> Box:
-        if self.soup is None:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         box = self.soup.find("div", class_="b-fight-details__fight")
@@ -442,11 +387,18 @@ class FightDetailsScraper(CustomModel):
         description = box.find("i", class_="b-fight-details__fight-title")
         if not isinstance(description, Tag):
             raise MissingHTMLElementError("Description tag (i.b-fight-details__fight-title)")
-        data_dict: dict[str, Any] = {"description": description.get_text()}
+        data_dict: dict[str, Any] = {"description": description.get_text().strip()}
 
-        # Scrape bonuses
+        # Scrape data from images
         imgs: ResultSet[Tag] = description.find_all("img")
-        data_dict["bonus_links"] = [img.get("src") for img in imgs]
+        img_names = [cast(str, img.get("src")).split("/")[-1] for img in imgs]
+        try:
+            img_names.remove("belt.png")
+            data_dict["title_bout"] = True
+        except ValueError:
+            data_dict["title_bout"] = False
+        finally:
+            data_dict["bonuses"] = img_names
 
         ps: ResultSet[Tag] = box.find_all("p", class_="b-fight-details__text")
         if len(ps) != 2:
@@ -464,14 +416,12 @@ class FightDetailsScraper(CustomModel):
             text = fix_consecutive_spaces(i.get_text().strip())
             field_name, field_value = text.split(": ")
             data_dict[field_name.lower()] = field_value
-        data_dict["time_str"] = data_dict.pop("time")
         data_dict["time_format"] = data_dict.pop("time format")
 
         # Scrape second line
         text = fix_consecutive_spaces(ps[1].get_text().strip())
         field_name, field_value = text.split(": ")
         data_dict[field_name.lower()] = field_value
-        data_dict["details_str"] = data_dict.pop("details")
 
         return Box.model_validate(data_dict)
 
@@ -517,8 +467,8 @@ class FightDetailsScraper(CustomModel):
                 matches = re.findall(r"\d+ of \d+", raw_value)
                 matches = cast(list[str], matches)
 
-                data_dict_1[field] = Count(count_str=matches[0])
-                data_dict_2[field] = Count(count_str=matches[1])
+                data_dict_1[field] = Count.model_validate({"count_str": matches[0]})
+                data_dict_2[field] = Count.model_validate({"count_str": matches[1]})
 
             processed_tables.append(
                 FightersSignificantStrikes(
@@ -542,7 +492,7 @@ class FightDetailsScraper(CustomModel):
                 "significant_strikes": self.scrape_significant_strikes(),
             }
             self.scraped_data = Fight.model_validate(data_dict)
-        except (AssertionError, AttributeError, IndexError, TypeError, ValidationError) as exc:
+        except (AttributeError, IndexError, TypeError, ValidationError) as exc:
             raise NoScrapedDataError(self.link) from exc
 
         return self.scraped_data
@@ -579,20 +529,12 @@ def scrape_fight(fight: DBFight) -> Fight:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
         raise exc
 
-    data_dict = dict(db=db, **fight._asdict())
-    try:
-        scraper = FightDetailsScraper.model_validate(data_dict)
-    except ValidationError as exc:
-        logger.exception("Failed to create scraper object")
-        logger.debug(f"Scraper args: {data_dict}")
-        console.danger("Failed!")
-        raise exc
-
+    scraper = FightDetailsScraper(db=db, **fight._asdict())
     try:
         scraper.scrape()
         console.success("Done!")
@@ -606,7 +548,7 @@ def scrape_fight(fight: DBFight) -> Fight:
         try:
             scraper.db_update_fight()
             console.success("Done!")
-        except sqlite3.Error as exc_2:
+        except SqliteError as exc_2:
             logger.exception("Failed to update fight status")
             console.danger("Failed!")
             raise exc_2
@@ -626,19 +568,18 @@ def scrape_fight(fight: DBFight) -> Fight:
         try:
             scraper.db_update_fight()
             console.success("Done!")
-        except sqlite3.Error as exc:
+        except SqliteError as exc:
             logger.exception("Failed to update fight status")
             console.danger("Failed!")
             raise exc
 
-    scraper.scraped_data = cast(Fight, scraper.scraped_data)
     return scraper.scraped_data
 
 
 @validate_call
 def scrape_fight_details(
     select: LinkSelection,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     delay: Annotated[float, Field(gt=0.0)] = config.default_delay,
 ) -> None:
     console.title("FIGHT DETAILS")
@@ -651,7 +592,7 @@ def scrape_fight_details(
         with LinksDB() as db:
             fights.extend(db.read_fights(select, limit))
         console.success("Done!")
-    except (DBNotSetupError, sqlite3.Error) as exc:
+    except (DBNotSetupError, SqliteError) as exc:
         logger.exception("Failed to read fights from DB")
         console.danger("Failed!")
         raise exc
@@ -724,7 +665,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fight_details(args.select, limit, args.delay)
-    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, sqlite3.Error):
+    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, SqliteError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
