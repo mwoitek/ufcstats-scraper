@@ -76,6 +76,7 @@ CustomTimeDelta = Annotated[
     timedelta,
     PlainSerializer(lambda d: int(d.total_seconds()), return_type=int),
 ]
+RawTableType = list[list[str]]
 
 WEIGHT_CLASS_PATTERN = "|".join(get_args(WeightClassType))
 logger = CustomLogger(
@@ -319,7 +320,7 @@ class Fight(CustomModel):
     fighter_2: str
     result: Result
     box: Box
-    significant_strikes: SignificantStrikes
+    significant_strikes: SignificantStrikes | None
 
     @model_serializer
     def to_dict(self) -> dict[str, Any]:
@@ -329,12 +330,16 @@ class Fight(CustomModel):
             "fighter1": self.fighter_1,
             "fighter2": self.fighter_2,
         }
+
         data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
         data_dict.update(self.box.model_dump(by_alias=True, exclude_none=True))
-        data_dict["significantStrikes"] = self.significant_strikes.model_dump(
-            by_alias=True,
-            exclude_none=True,
-        )
+
+        if self.significant_strikes:
+            data_dict["significantStrikes"] = self.significant_strikes.model_dump(
+                by_alias=True,
+                exclude_none=True,
+            )
+
         return data_dict
 
 
@@ -436,9 +441,15 @@ class FightDetailsScraper:
 
         return Box.model_validate(data_dict)
 
-    def scrape_tables(self) -> tuple[list[list[str]], list[list[str]]]:
+    def scrape_tables(self) -> tuple[RawTableType | None, RawTableType | None]:
         if not hasattr(self, "soup"):
             raise NoSoupError
+
+        # Deal with case where there's no table
+        section = self.soup.find("section", class_="b-fight-details__section")
+        assert isinstance(section, Tag)
+        if section.get_text().strip() == "Round-by-round stats not currently available.":
+            return None, None
 
         table_bodies: ResultSet[Tag] = self.soup.find_all("tbody")
         if len(table_bodies) != 4:
@@ -468,9 +479,9 @@ class FightDetailsScraper:
         self.strikes_tables = strikes_tables
         return self.totals_tables, self.strikes_tables
 
-    def scrape_significant_strikes(self) -> SignificantStrikes:
+    def scrape_significant_strikes(self) -> SignificantStrikes | None:
         if not hasattr(self, "strikes_tables"):
-            raise ScraperError("Tables have not been scraped")
+            return
 
         FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
         processed_tables: list[FightersSignificantStrikes] = []
