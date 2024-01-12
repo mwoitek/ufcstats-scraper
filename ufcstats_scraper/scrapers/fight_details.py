@@ -16,6 +16,7 @@ from more_itertools import chunked
 from pydantic import (
     Field,
     NonNegativeInt,
+    PositiveFloat,
     PositiveInt,
     ValidationError,
     ValidatorFunctionWrapHandler,
@@ -30,6 +31,7 @@ from requests.exceptions import RequestException
 import ufcstats_scraper.config as config
 from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
+from ufcstats_scraper.db.checks import is_db_setup, is_table_empty
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -146,8 +148,8 @@ class Box(CustomModel):
     time: CustomTimeDelta
     time_format: str
     referee: CleanName
-    details: str | None
-    scorecards: list[Scorecard] | None
+    details: str | None = None
+    scorecards: list[Scorecard] | None = None
 
     @model_validator(mode="wrap")  # pyright: ignore
     def parse_description(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
@@ -247,7 +249,7 @@ class Count(CustomModel):
 
 class FighterSignificantStrikes(CustomModel):
     total: Count
-    percentage: PercRatio | None
+    percentage: PercRatio | None = None
     head: Count
     body: Count
     leg: Count
@@ -425,48 +427,59 @@ class FightDetailsScraper:
 
         return Box.model_validate(data_dict)
 
-    def scrape_significant_strikes(self) -> SignificantStrikes:
-        if self.soup is None:
+    def scrape_tables(self) -> tuple[list[list[str]], list[list[str]]]:
+        if not hasattr(self, "soup"):
             raise NoSoupError
 
         table_bodies: ResultSet[Tag] = self.soup.find_all("tbody")
         if len(table_bodies) != 4:
             raise MissingHTMLElementError("Table bodies (tbody)")
 
-        cells_1: ResultSet[Tag] = table_bodies[2].find_all("td")
-        num_cells_1 = len(cells_1)
-        assert num_cells_1 > 0 and num_cells_1 % 9 == 0, f"invalid number of cells: {num_cells_1}"
+        # TODO: Process "Totals" tables
+        totals_tables: list[list[str]] = []
 
-        cells_2: ResultSet[Tag] = table_bodies[3].find_all("td")
-        num_cells_2 = len(cells_2)
-        assert num_cells_2 > 0 and num_cells_2 % 9 == 0, f"invalid number of cells: {num_cells_2}"
+        # Process "Significant Strikes" tables
+        cells_3: ResultSet[Tag] = table_bodies[2].find_all("td")
+        num_cells_3 = len(cells_3)
+        assert num_cells_3 > 0 and num_cells_3 % 9 == 0, f"invalid number of cells: {num_cells_3}"
 
-        raw_tables: list[list[str]] = []
-        for cells in chunked(chain(cells_1, cells_2), n=9):
-            cells = cells[1:]
+        cells_4: ResultSet[Tag] = table_bodies[3].find_all("td")
+        num_cells_4 = len(cells_4)
+        assert num_cells_4 > 0 and num_cells_4 % 9 == 0, f"invalid number of cells: {num_cells_4}"
+
+        strikes_tables: list[list[str]] = []
+        for cells in chunked(chain(cells_3, cells_4), n=9):
+            cells.pop(0)
             cells[0], cells[1] = cells[1], cells[0]
-            raw_table = [fix_consecutive_spaces(cell.get_text().strip()) for cell in cells]
-            raw_tables.append(raw_table)
-        assert len(raw_tables) >= 2, "there should be at least 2 tables"
+            strikes_table = [fix_consecutive_spaces(cell.get_text().strip()) for cell in cells]
+            strikes_tables.append(strikes_table)
+        assert len(strikes_tables) >= 2, "there should be at least 2 tables"
+
+        self.totals_tables = totals_tables
+        self.strikes_tables = strikes_tables
+        return self.totals_tables, self.strikes_tables
+
+    def scrape_significant_strikes(self) -> SignificantStrikes:
+        if not hasattr(self, "strikes_tables"):
+            raise ScraperError("Tables have not been scraped")
 
         FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
         processed_tables: list[FightersSignificantStrikes] = []
 
-        for raw_table in raw_tables:
-            percentage_str_1, percentage_str_2 = raw_table[0].split(" ")
+        for raw_table in self.strikes_tables:
+            percentage_1, percentage_2 = raw_table[0].split(" ")
 
-            data_dict_1: dict[str, Any] = {"percentage_str": percentage_str_1.strip("-")}
-            if data_dict_1["percentage_str"] == "":
-                del data_dict_1["percentage_str"]
+            data_dict_1: dict[str, Any] = {"percentage": percentage_1.strip("-")}
+            if not data_dict_1["percentage"]:
+                del data_dict_1["percentage"]
 
-            data_dict_2: dict[str, Any] = {"percentage_str": percentage_str_2.strip("-")}
-            if data_dict_2["percentage_str"] == "":
-                del data_dict_2["percentage_str"]
+            data_dict_2: dict[str, Any] = {"percentage": percentage_2.strip("-")}
+            if not data_dict_2["percentage"]:
+                del data_dict_2["percentage"]
 
-            for field, raw_value in zip(FIELDS, raw_table[1:]):
+            for field, raw_value in zip(FIELDS, raw_table[1:], strict=True):
                 matches = re.findall(r"\d+ of \d+", raw_value)
                 matches = cast(list[str], matches)
-
                 data_dict_1[field] = Count.model_validate({"count_str": matches[0]})
                 data_dict_2[field] = Count.model_validate({"count_str": matches[1]})
 
@@ -484,6 +497,7 @@ class FightDetailsScraper:
         self.success = False
 
         self.get_soup()
+        self.scrape_tables()
 
         try:
             data_dict: dict[str, Any] = {
@@ -491,23 +505,24 @@ class FightDetailsScraper:
                 "box": self.scrape_box(),
                 "significant_strikes": self.scrape_significant_strikes(),
             }
-            self.scraped_data = Fight.model_validate(data_dict)
-        except (AttributeError, IndexError, TypeError, ValidationError) as exc:
+            scraped_data = Fight.model_validate(data_dict)
+        except (AssertionError, ValidationError) as exc:
             raise NoScrapedDataError(self.link) from exc
 
+        self.scraped_data = scraped_data
         return self.scraped_data
 
     def save_json(self) -> None:
-        if self.scraped_data is None:
+        if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
         try:
             mkdir(FightDetailsScraper.DATA_DIR, mode=0o755)
         except FileExistsError:
-            pass
+            logger.info(f"Directory {FightDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.model_dump()
-        file_name = str(self.link).split("/")[-1]
+        file_name = self.link.split("/")[-1]
         out_file = FightDetailsScraper.DATA_DIR / f"{file_name}.json"
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
@@ -518,12 +533,49 @@ class FightDetailsScraper:
         if not self.tried:
             logger.info("Fight was not updated since no attempt was made to scrape data")
             return
-        self.success = cast(bool, self.success)
         self.db.update_status("fight", self.id, self.tried, self.success)
 
 
+def check_links_db() -> bool:
+    try:
+        if not is_db_setup():
+            logger.info("Links DB is not setup")
+            console.danger("Links DB is not setup!")
+            console.info("Run setup command and try again.")
+            return False
+
+        if is_table_empty("fight"):
+            logger.info("Links DB has no fight data")
+            console.danger("Links DB has no fight data!")
+            console.info("Scrape that data and try again.")
+            return False
+    except (FileNotFoundError, SqliteError) as exc:
+        logger.exception("Failed to check links DB")
+        raise exc
+
+    return True
+
+
+def read_fights(select: LinkSelection, limit: int | None = None) -> list[DBFight]:
+    fights: list[DBFight] = []
+
+    console.subtitle("FIGHT LINKS")
+    console.print("Retrieving fight links...")
+
+    try:
+        with LinksDB() as db:
+            fights.extend(db.read_fights(select, limit))
+        console.success("Done!")
+    except (DBNotSetupError, SqliteError) as exc:
+        logger.exception("Failed to read fights from DB")
+        console.danger("Failed!")
+        raise exc
+
+    return fights
+
+
 def scrape_fight(fight: DBFight) -> Fight:
-    label = f"{fight.fighter_1_name} vs {fight.fighter_2_name} ({fight.event_name})"
+    label = f"{fight.fighter_1_name} vs. {fight.fighter_2_name} ({fight.event_name})"
     console.subtitle(label.upper())
     console.print(f"Scraping page for [b]{label}[/b]...")
 
@@ -579,33 +631,25 @@ def scrape_fight(fight: DBFight) -> Fight:
 @validate_call
 def scrape_fight_details(
     select: LinkSelection,
-    limit: int | None = None,
-    delay: Annotated[float, Field(gt=0.0)] = config.default_delay,
+    limit: PositiveInt | None = None,
+    delay: PositiveFloat = config.default_delay,
 ) -> None:
     console.title("FIGHT DETAILS")
 
-    console.subtitle("FIGHT LINKS")
-    console.print("Retrieving fight links...")
+    if not check_links_db():
+        return
 
-    fights: list[DBFight] = []
-    try:
-        with LinksDB() as db:
-            fights.extend(db.read_fights(select, limit))
-        console.success("Done!")
-    except (DBNotSetupError, SqliteError) as exc:
-        logger.exception("Failed to read fights from DB")
-        console.danger("Failed!")
-        raise exc
-
+    fights = read_fights(select, limit)
     num_fights = len(fights)
     if num_fights == 0:
         console.info("No fight to scrape.")
         return
     console.success(f"Got {num_fights} fight(s) to scrape.")
 
+    ok_count = 0
+
     with progress:
         task = progress.add_task("Scraping fights...", total=num_fights)
-        ok_count = 0
 
         for i, fight in enumerate(fights, start=1):
             try:
@@ -627,8 +671,8 @@ def scrape_fight_details(
         console.danger("No data was scraped.")
         raise NoScrapedDataError("http://ufcstats.com/fight-details/")
 
-    count_str = "all fights" if num_fights == ok_count else f"{ok_count} out of {num_fights} fight(s)"
-    console.info(f"Successfully scraped data for {count_str}.")
+    msg_count = "all fights" if num_fights == ok_count else f"{ok_count} out of {num_fights} fight(s)"
+    console.info(f"Successfully scraped data for {msg_count}.")
 
 
 if __name__ == "__main__":
@@ -665,7 +709,7 @@ if __name__ == "__main__":
     console.quiet = args.quiet
     try:
         scrape_fight_details(args.select, limit, args.delay)
-    except (DBNotSetupError, NoScrapedDataError, OSError, ValidationError, SqliteError):
+    except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError):
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
