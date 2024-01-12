@@ -36,7 +36,7 @@ from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.db import LinksDB
 from ufcstats_scraper.db.exceptions import DBNotSetupError
 from ufcstats_scraper.db.models import DBFight
-from ufcstats_scraper.scrapers.common import CleanName, PercRatio, fix_consecutive_spaces
+from ufcstats_scraper.scrapers.common import CleanName, FightLink, PercRatio, fix_consecutive_spaces
 from ufcstats_scraper.scrapers.exceptions import (
     MissingHTMLElementError,
     NoScrapedDataError,
@@ -313,13 +313,22 @@ class SignificantStrikes(CustomModel):
 
 # TODO: Finish this model!!!
 class Fight(CustomModel):
+    link: FightLink
+    event: str
+    fighter_1: str
+    fighter_2: str
     result: Result
     box: Box
     significant_strikes: SignificantStrikes
 
     @model_serializer
     def to_dict(self) -> dict[str, Any]:
-        data_dict: dict[str, Any] = {}
+        data_dict: dict[str, Any] = {
+            "link": str(self.link),
+            "event": self.event,
+            "fighter1": self.fighter_1,
+            "fighter2": self.fighter_2,
+        }
         data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
         data_dict.update(self.box.model_dump(by_alias=True, exclude_none=True))
         data_dict["significantStrikes"] = self.significant_strikes.model_dump(
@@ -501,6 +510,10 @@ class FightDetailsScraper:
 
         try:
             data_dict: dict[str, Any] = {
+                "link": self.link,
+                "event": self.event_name,
+                "fighter_1": self.fighter_1_name,
+                "fighter_2": self.fighter_2_name,
                 "result": self.scrape_result(),
                 "box": self.scrape_box(),
                 "significant_strikes": self.scrape_significant_strikes(),
