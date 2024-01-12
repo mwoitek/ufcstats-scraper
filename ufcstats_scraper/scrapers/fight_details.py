@@ -455,8 +455,23 @@ class FightDetailsScraper:
         if len(table_bodies) != 4:
             raise MissingHTMLElementError("Table bodies (tbody)")
 
-        # TODO: Process "Totals" tables
-        totals_tables: list[list[str]] = []
+        # Process "Totals" tables
+        cells_1: ResultSet[Tag] = table_bodies[0].find_all("td")
+        num_cells_1 = len(cells_1)
+        assert num_cells_1 > 0 and num_cells_1 % 10 == 0, f"invalid number of cells: {num_cells_1}"
+
+        cells_2: ResultSet[Tag] = table_bodies[1].find_all("td")
+        num_cells_2 = len(cells_2)
+        assert num_cells_2 > 0 and num_cells_2 % 10 == 0, f"invalid number of cells: {num_cells_2}"
+
+        totals_tables: RawTableType = []
+        idxs = [3, 6, 2, 4, 5, 1, 7, 8, 9]
+        for cells in chunked(chain(cells_1, cells_2), n=10):
+            # Re-order cells to group similar data together
+            cells = [cells[idx] for idx in idxs]
+            totals_table = [fix_consecutive_spaces(cell.get_text().strip()) for cell in cells]
+            totals_tables.append(totals_table)
+        assert len(totals_tables) >= 2, "there should be at least 2 tables"
 
         # Process "Significant Strikes" tables
         cells_3: ResultSet[Tag] = table_bodies[2].find_all("td")
@@ -467,7 +482,7 @@ class FightDetailsScraper:
         num_cells_4 = len(cells_4)
         assert num_cells_4 > 0 and num_cells_4 % 9 == 0, f"invalid number of cells: {num_cells_4}"
 
-        strikes_tables: list[list[str]] = []
+        strikes_tables: RawTableType = []
         for cells in chunked(chain(cells_3, cells_4), n=9):
             cells.pop(0)
             cells[0], cells[1] = cells[1], cells[0]
