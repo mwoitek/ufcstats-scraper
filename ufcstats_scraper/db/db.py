@@ -181,8 +181,6 @@ class LinksDB:
         select: LinkSelection = default_select,
         limit: int | None = None,
     ) -> list[DBFight]:
-        # The most recent fights are added to the DB first. But I want to
-        # scrape the data in reverse order.
         query = """
         SELECT
           fight.id,
@@ -206,8 +204,6 @@ class LinksDB:
                 query = f"{query} WHERE fight.success = 0"
             case "all":
                 pass
-
-        query = f"{query} ORDER BY fight.id DESC"
 
         if isinstance(limit, int):
             query = f"{query} LIMIT {limit}"
