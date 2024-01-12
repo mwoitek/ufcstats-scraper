@@ -8,5 +8,6 @@
     },
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
-  "ruff.lint.run": "onSave"
+  "ruff.lint.run": "onSave",
+  "editor.lightbulb.enabled": false
 }
