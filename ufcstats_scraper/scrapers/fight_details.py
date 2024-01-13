@@ -79,6 +79,7 @@ CustomTimeDelta = Annotated[
 RawTableType = list[list[str]]
 
 WEIGHT_CLASS_PATTERN = "|".join(get_args(WeightClassType))
+
 logger = CustomLogger(
     name="fight_details",
     file_name="ufcstats_scraper" if config.logger_single_file else None,
@@ -145,7 +146,7 @@ class Box(CustomModel):
     sex: Literal["Female", "Male"] = "Male"
     weight_class: WeightClassType
     method: MethodType
-    round: int = Field(..., ge=1, le=5)
+    round: Annotated[int, Field(ge=1, le=5)]
     time: CustomTimeDelta
     time_format: str
     referee: CleanName
@@ -170,7 +171,14 @@ class Box(CustomModel):
     def parse_details(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
+
         details = cast(str, self.pop("details"))
+        # For some reason, sometimes this string starts with a meaningless
+        # "to". Remove this prefix:
+        details = details.removeprefix("to").strip()
+        if not details:
+            return handler(self)
+
         matches = re.findall(r"\D+\d+ - \d+\. ?", details)
         matches = cast(list[str], matches)
         if len(matches) == 0:
@@ -209,7 +217,6 @@ class Box(CustomModel):
             assert self.details is None, "fields 'method' and 'details' are inconsistent"
             assert self.scorecards is not None, "fields 'method' and 'scorecards' are inconsistent"
         else:
-            assert self.details is not None, "fields 'method' and 'details' are inconsistent"
             assert self.scorecards is None, "fields 'method' and 'scorecards' are inconsistent"
         return self
 
@@ -237,9 +244,10 @@ class Count(CustomModel):
         return handler(self)
 
     def __add__(self, other: "Count") -> "Count":
-        landed = self.landed + other.landed
-        attempted = self.attempted + other.attempted
-        return Count(landed=landed, attempted=attempted)
+        return Count(
+            landed=self.landed + other.landed,
+            attempted=self.attempted + other.attempted,
+        )
 
 
 class FighterTotals(CustomModel):
@@ -258,6 +266,24 @@ class FighterTotals(CustomModel):
     )
     _convert_time = field_validator("control_time", mode="wrap")(convert_time)  # pyright: ignore
 
+    @model_validator(mode="after")
+    def check_percentages(self) -> Self:
+        for field in ["significant_strikes", "takedowns"]:
+            count = getattr(self, field)
+            count = cast(Count, count)
+
+            if count.attempted == 0:
+                assert count.landed == 0, "landed and attempted are inconsistent"
+                assert getattr(self, f"{field}_percentage") is None, "percentage should be undefined"
+                return self
+
+            computed = round(count.landed / count.attempted, 2)
+            scraped = getattr(self, f"{field}_percentage")
+            assert isinstance(scraped, float), "percentage should be defined"
+            assert isclose(computed, scraped, abs_tol=0.1), "count and percentage are inconsistent"
+
+        return self
+
 
 class FightersTotals(CustomModel):
     fighter_1: FighterTotals
@@ -265,13 +291,13 @@ class FightersTotals(CustomModel):
 
 
 class Totals(CustomModel):
-    total: FightersTotals
+    all_rounds: FightersTotals
     per_round: list[FightersTotals]
 
     @model_serializer
     def to_dict(self) -> dict[str, Any]:
         data_dict: dict[str, Any] = {}
-        data_dict["total"] = self.total.model_dump(by_alias=True, exclude_none=True)
+        data_dict["allRounds"] = self.all_rounds.model_dump(by_alias=True, exclude_none=True)
 
         per_round_dict: dict[str, Any] = {}
         for i, round_data in enumerate(self.per_round, start=1):
@@ -306,16 +332,14 @@ class FighterSignificantStrikes(CustomModel):
 
     @model_validator(mode="after")
     def check_percentage(self) -> Self:
-        total_landed = self.total.landed
-        total_attempted = self.total.attempted
-
-        if total_attempted == 0:
-            assert total_landed == 0, "total landed and total attempted are inconsistent"
+        if self.total.attempted == 0:
+            assert self.total.landed == 0, "total landed and total attempted are inconsistent"
             assert self.percentage is None, "percentage should be undefined"
             return self
 
-        computed = round(total_landed / total_attempted, 2)
-        scraped = cast(float, self.percentage)
+        computed = round(self.total.landed / self.total.attempted, 2)
+        scraped = self.percentage
+        assert isinstance(scraped, float), "percentage should be defined"
         assert isclose(computed, scraped, abs_tol=0.1), "'total' and 'percentage' are inconsistent"
 
         return self
@@ -327,15 +351,13 @@ class FightersSignificantStrikes(CustomModel):
 
 
 class SignificantStrikes(CustomModel):
-    total: FightersSignificantStrikes
+    all_rounds: FightersSignificantStrikes
     per_round: list[FightersSignificantStrikes]
-
-    # TODO: Add validation
 
     @model_serializer
     def to_dict(self) -> dict[str, Any]:
         data_dict: dict[str, Any] = {}
-        data_dict["total"] = self.total.model_dump(by_alias=True, exclude_none=True)
+        data_dict["allRounds"] = self.all_rounds.model_dump(by_alias=True, exclude_none=True)
 
         per_round_dict: dict[str, Any] = {}
         for i, round_data in enumerate(self.per_round, start=1):
@@ -352,7 +374,7 @@ class Fight(CustomModel):
     fighter_2: str
     result: Result
     box: Box
-    totals: Totals | None = None
+    totals: Totals | None
     significant_strikes: SignificantStrikes | None
 
     @model_serializer
@@ -367,16 +389,22 @@ class Fight(CustomModel):
         data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
         data_dict.update(self.box.model_dump(by_alias=True, exclude_none=True))
 
-        if self.totals:
+        if self.totals and self.significant_strikes:
             data_dict["totals"] = self.totals.model_dump(by_alias=True, exclude_none=True)
-
-        if self.significant_strikes:
             data_dict["significantStrikes"] = self.significant_strikes.model_dump(
                 by_alias=True,
                 exclude_none=True,
             )
 
         return data_dict
+
+    @model_validator(mode="after")
+    def check_consistency(self) -> Self:
+        if self.totals:
+            assert self.significant_strikes is not None, "'totals' and 'significant_strikes' are inconsistent"
+        else:
+            assert self.significant_strikes is None, "'totals' and 'significant_strikes' are inconsistent"
+        return self
 
 
 class FightDetailsScraper:
@@ -570,7 +598,7 @@ class FightDetailsScraper:
                 )
             )
 
-        return Totals(total=processed_tables[0], per_round=processed_tables[1:])
+        return Totals(all_rounds=processed_tables[0], per_round=processed_tables[1:])
 
     def scrape_significant_strikes(self) -> SignificantStrikes | None:
         if not hasattr(self, "strikes_tables"):
@@ -603,7 +631,7 @@ class FightDetailsScraper:
                 )
             )
 
-        return SignificantStrikes(total=processed_tables[0], per_round=processed_tables[1:])
+        return SignificantStrikes(all_rounds=processed_tables[0], per_round=processed_tables[1:])
 
     def scrape(self) -> Fight:
         self.tried = True
