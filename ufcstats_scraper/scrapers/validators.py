@@ -1,5 +1,6 @@
 import re
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Literal
 
 from pydantic import HttpUrl, ValidatorFunctionWrapHandler
@@ -14,6 +15,15 @@ def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl
         return link
 
     return validator
+
+
+def convert_time(time: str | None, handler: ValidatorFunctionWrapHandler) -> timedelta | None:
+    if time is None:
+        return
+    match = re.match(r"(\d{1,2}):(\d{2})", time)
+    assert isinstance(match, re.Match)
+    converted = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
+    return handler(converted)
 
 
 def fill_height(height: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:

@@ -43,7 +43,7 @@ from ufcstats_scraper.scrapers.exceptions import (
     NoSoupError,
     ScraperError,
 )
-from ufcstats_scraper.scrapers.validators import fill_ratio
+from ufcstats_scraper.scrapers.validators import convert_time, fill_ratio
 
 BonusType = Literal[
     "Fight of the Night",
@@ -152,6 +152,8 @@ class Box(CustomModel):
     details: str | None = None
     scorecards: list[Scorecard] | None = None
 
+    _convert_time = field_validator("time", mode="wrap")(convert_time)  # pyright: ignore
+
     @model_validator(mode="wrap")  # pyright: ignore
     def parse_description(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
@@ -201,14 +203,6 @@ class Box(CustomModel):
                     raise ValueError(f"invalid bonus: {bonus}")
         return handler(bonuses)
 
-    @field_validator("time", mode="wrap")  # pyright: ignore
-    @classmethod
-    def convert_time(cls, time: str, handler: ValidatorFunctionWrapHandler) -> timedelta:
-        match = re.match(r"(\d{1,2}):(\d{2})", time)
-        assert isinstance(match, re.Match)
-        converted = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
-        return handler(converted)
-
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
         if self.method.lower().startswith("decision"):
@@ -246,6 +240,45 @@ class Count(CustomModel):
         landed = self.landed + other.landed
         attempted = self.attempted + other.attempted
         return Count(landed=landed, attempted=attempted)
+
+
+class FighterTotals(CustomModel):
+    knockdowns: NonNegativeInt
+    significant_strikes: Count
+    significant_strikes_percentage: PercRatio | None = None
+    total_strikes: Count
+    takedowns: Count
+    takedowns_percentage: PercRatio | None = None
+    submission_attempts: NonNegativeInt
+    reversals: NonNegativeInt
+    control_time: CustomTimeDelta | None = None
+
+    _fill_ratio = field_validator("significant_strikes_percentage", "takedowns_percentage", mode="wrap")(
+        fill_ratio  # pyright: ignore
+    )
+    _convert_time = field_validator("control_time", mode="wrap")(convert_time)  # pyright: ignore
+
+
+class FightersTotals(CustomModel):
+    fighter_1: FighterTotals
+    fighter_2: FighterTotals
+
+
+class Totals(CustomModel):
+    total: FightersTotals
+    per_round: list[FightersTotals]
+
+    @model_serializer
+    def to_dict(self) -> dict[str, Any]:
+        data_dict: dict[str, Any] = {}
+        data_dict["total"] = self.total.model_dump(by_alias=True, exclude_none=True)
+
+        per_round_dict: dict[str, Any] = {}
+        for i, round_data in enumerate(self.per_round, start=1):
+            per_round_dict[f"round{i}"] = round_data.model_dump(by_alias=True, exclude_none=True)
+        data_dict["perRound"] = per_round_dict
+
+        return data_dict
 
 
 class FighterSignificantStrikes(CustomModel):
@@ -312,7 +345,6 @@ class SignificantStrikes(CustomModel):
         return data_dict
 
 
-# TODO: Finish this model!!!
 class Fight(CustomModel):
     link: FightLink
     event: str
@@ -320,6 +352,7 @@ class Fight(CustomModel):
     fighter_2: str
     result: Result
     box: Box
+    totals: Totals | None = None
     significant_strikes: SignificantStrikes | None
 
     @model_serializer
@@ -333,6 +366,9 @@ class Fight(CustomModel):
 
         data_dict["result"] = self.result.model_dump(by_alias=True, exclude_none=True)
         data_dict.update(self.box.model_dump(by_alias=True, exclude_none=True))
+
+        if self.totals:
+            data_dict["totals"] = self.totals.model_dump(by_alias=True, exclude_none=True)
 
         if self.significant_strikes:
             data_dict["significantStrikes"] = self.significant_strikes.model_dump(
@@ -465,7 +501,7 @@ class FightDetailsScraper:
         assert num_cells_2 > 0 and num_cells_2 % 10 == 0, f"invalid number of cells: {num_cells_2}"
 
         totals_tables: RawTableType = []
-        idxs = [3, 6, 2, 4, 5, 1, 7, 8, 9]
+        idxs = [3, 6, 9, 2, 4, 5, 1, 7, 8]
         for cells in chunked(chain(cells_1, cells_2), n=10):
             # Re-order cells to group similar data together
             cells = [cells[idx] for idx in idxs]
@@ -493,6 +529,48 @@ class FightDetailsScraper:
         self.totals_tables = totals_tables
         self.strikes_tables = strikes_tables
         return self.totals_tables, self.strikes_tables
+
+    def scrape_totals(self) -> Totals | None:
+        if not hasattr(self, "totals_tables"):
+            return
+
+        OPTIONAL_FIELDS = ["significant_strikes_percentage", "takedowns_percentage", "control_time"]
+        COUNT_FIELDS = ["significant_strikes", "total_strikes", "takedowns"]
+        INT_FIELDS = ["knockdowns", "submission_attempts", "reversals"]
+        processed_tables: list[FightersTotals] = []
+
+        for raw_table in self.totals_tables:
+            data_dict_1: dict[str, Any] = {}
+            data_dict_2: dict[str, Any] = {}
+
+            for field, raw_value in zip(OPTIONAL_FIELDS, raw_table[:3], strict=True):
+                value_1, value_2 = raw_value.split(" ")
+
+                data_dict_1[field] = value_1.strip("-")
+                if not data_dict_1[field]:
+                    del data_dict_1[field]
+
+                data_dict_2[field] = value_2.strip("-")
+                if not data_dict_2[field]:
+                    del data_dict_2[field]
+
+            for field, raw_value in zip(COUNT_FIELDS, raw_table[3:6], strict=True):
+                matches = re.findall(r"\d+ of \d+", raw_value)
+                matches = cast(list[str], matches)
+                data_dict_1[field] = Count.model_validate({"count_str": matches[0]})
+                data_dict_2[field] = Count.model_validate({"count_str": matches[1]})
+
+            for field, raw_value in zip(INT_FIELDS, raw_table[6:], strict=True):
+                data_dict_1[field], data_dict_2[field] = raw_value.split(" ")
+
+            processed_tables.append(
+                FightersTotals(
+                    fighter_1=FighterTotals.model_validate(data_dict_1),
+                    fighter_2=FighterTotals.model_validate(data_dict_2),
+                )
+            )
+
+        return Totals(total=processed_tables[0], per_round=processed_tables[1:])
 
     def scrape_significant_strikes(self) -> SignificantStrikes | None:
         if not hasattr(self, "strikes_tables"):
@@ -542,6 +620,7 @@ class FightDetailsScraper:
                 "fighter_2": self.fighter_2_name,
                 "result": self.scrape_result(),
                 "box": self.scrape_box(),
+                "totals": self.scrape_totals(),
                 "significant_strikes": self.scrape_significant_strikes(),
             }
             scraped_data = Fight.model_validate(data_dict)
