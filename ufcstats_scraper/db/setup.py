@@ -40,9 +40,9 @@ class DBCreator:
             try:
                 self.create_table(table)
                 console.success("Done!")
-            except (FileNotFoundError, sqlite3.Error) as exc:
+            except (FileNotFoundError, sqlite3.Error):
                 console.danger("Failed!")
-                raise exc
+                raise
 
     def drop(self) -> None:
         console.subtitle("DROPPING TABLES")
@@ -51,9 +51,9 @@ class DBCreator:
             try:
                 self.drop_table(table)
                 console.success("Done!")
-            except (FileNotFoundError, sqlite3.Error) as exc:
+            except (FileNotFoundError, sqlite3.Error):
                 console.danger("Failed!")
-                raise exc
+                raise
 
 
 @validate_call

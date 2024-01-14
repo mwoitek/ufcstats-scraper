@@ -7,10 +7,10 @@ reportUnnecessaryTypeIgnoreComment = "information"
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-safe-fixes = ["UP"]
+unsafe-fixes = true
 
 [tool.ruff.lint]
-select = ["I", "UP"]
+select = ["F841", "I", "TRY201", "UP"]
 
 [tool.ruff.lint.isort]
 case-sensitive = true

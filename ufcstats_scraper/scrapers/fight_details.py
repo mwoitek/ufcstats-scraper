@@ -695,9 +695,9 @@ def check_links_db() -> bool:
             console.danger("Links DB has no fight data!")
             console.info("Scrape that data and try again.")
             return False
-    except (FileNotFoundError, SqliteError) as exc:
+    except (FileNotFoundError, SqliteError):
         logger.exception("Failed to check links DB")
-        raise exc
+        raise
 
     return True
 
@@ -712,10 +712,10 @@ def read_fights(select: LinkSelection, limit: int | None = None) -> list[DBFight
         with LinksDB() as db:
             fights.extend(db.read_fights(select, limit))
         console.success("Done!")
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to read fights from DB")
         console.danger("Failed!")
-        raise exc
+        raise
 
     return fights
 
@@ -727,16 +727,16 @@ def scrape_fight(fight: DBFight) -> Fight:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
-        raise exc
+        raise
 
     scraper = FightDetailsScraper(db=db, **fight._asdict())
     try:
         scraper.scrape()
         console.success("Done!")
-    except ScraperError as exc_1:
+    except ScraperError:
         logger.exception("Failed to scrape fight details")
         logger.debug(f"Fight: {fight}")
         console.danger("Failed!")
@@ -746,30 +746,30 @@ def scrape_fight(fight: DBFight) -> Fight:
         try:
             scraper.db_update_fight()
             console.success("Done!")
-        except SqliteError as exc_2:
+        except SqliteError:
             logger.exception("Failed to update fight status")
             console.danger("Failed!")
-            raise exc_2
+            raise
 
-        raise exc_1
+        raise
 
     console.print("Saving scraped data...")
     try:
         scraper.save_json()
         console.success("Done!")
-    except OSError as exc:
+    except OSError:
         logger.exception("Failed to save data to JSON")
         console.danger("Failed!")
-        raise exc
+        raise
     finally:
         console.print("Updating fight status...")
         try:
             scraper.db_update_fight()
             console.success("Done!")
-        except SqliteError as exc:
+        except SqliteError:
             logger.exception("Failed to update fight status")
             console.danger("Failed!")
-            raise exc
+            raise
 
     return scraper.scraped_data
 

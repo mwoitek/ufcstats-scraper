@@ -191,9 +191,9 @@ def check_links_db() -> bool:
             console.danger("Links DB has no data from the fighters list!")
             console.info("Scrape that data and try again.")
             return False
-    except (FileNotFoundError, SqliteError) as exc:
+    except (FileNotFoundError, SqliteError):
         logger.exception("Failed to check links DB")
-        raise exc
+        raise
 
     return True
 
@@ -208,10 +208,10 @@ def read_events(select: LinkSelection, limit: int | None = None) -> list[DBEvent
         with LinksDB() as db:
             events.extend(db.read_events(select, limit))
         console.success("Done!")
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to read events from DB")
         console.danger("Failed!")
-        raise exc
+        raise
 
     return events
 
@@ -222,10 +222,10 @@ def scrape_event(event: DBEvent) -> Event:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
-        raise exc
+        raise
 
     scraper = EventDetailsScraper(db=db, **event._asdict())
     try:
@@ -233,7 +233,7 @@ def scrape_event(event: DBEvent) -> Event:
         console.success("Done!")
         num_fights = len(scraper.scraped_data.fights)
         console.success(f"Scraped data for {num_fights} fights.")
-    except ScraperError as exc_1:
+    except ScraperError:
         logger.exception("Failed to scrape event details")
         logger.debug(f"Event: {event}")
         console.danger("Failed!")
@@ -243,39 +243,39 @@ def scrape_event(event: DBEvent) -> Event:
         try:
             scraper.db_update_event()
             console.success("Done!")
-        except SqliteError as exc_2:
+        except SqliteError:
             logger.exception("Failed to update event status")
             console.danger("Failed!")
-            raise exc_2
+            raise
 
-        raise exc_1
+        raise
 
     console.print("Saving scraped data...")
     try:
         scraper.save_json()
         console.success("Done!")
-    except OSError as exc:
+    except OSError:
         logger.exception("Failed to save data to JSON")
         console.danger("Failed!")
-        raise exc
+        raise
     finally:
         console.print("Updating event status...")
         try:
             scraper.db_update_event()
             console.success("Done!")
-        except SqliteError as exc:
+        except SqliteError:
             logger.exception("Failed to update event status")
             console.danger("Failed!")
-            raise exc
+            raise
 
     console.print("Updating fight data...")
     try:
         scraper.db_update_fight_data()
         console.success("Done!")
-    except SqliteError as exc:
+    except SqliteError:
         logger.exception("Failed to update fight data")
         console.danger("Failed!")
-        raise exc
+        raise
 
     return scraper.scraped_data
 

@@ -197,39 +197,39 @@ def scrape_letter(letter: str) -> list[Fighter]:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
-        raise exc
+        raise
 
     scraper = FightersListScraper(letter=letter, db=db)
     try:
         scraper.scrape()
         console.success("Done!")
         console.success(f"Scraped data for {len(scraper.scraped_data)} fighters.")
-    except ScraperError as exc:
+    except ScraperError:
         logger.exception(f"Failed to scrape data for {letter_upper}")
         console.danger("Failed!")
         console.danger("No data was scraped.")
-        raise exc
+        raise
 
     console.print("Saving scraped data...")
     try:
         scraper.save_json()
         console.success("Done!")
-    except OSError as exc:
+    except OSError:
         logger.exception(f"Failed to save data to JSON for {letter_upper}")
         console.danger("Failed!")
-        raise exc
+        raise
 
     console.print("Inserting fighter data into DB...")
     try:
         scraper.db_insert_fighters()
         console.success("Done!")
-    except SqliteError as exc:
+    except SqliteError:
         logger.exception("Failed to insert fighter data into DB")
         console.danger("Failed!")
-        raise exc
+        raise
 
     return scraper.scraped_data
 
@@ -280,10 +280,10 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
         with open(out_file, mode="w") as json_file:
             dump(out_data, json_file, indent=2)
         console.success("Done!")
-    except OSError as exc:
+    except OSError:
         logger.exception("Failed to save combined data to JSON")
         console.danger("Failed!")
-        raise exc
+        raise
 
 
 if __name__ == "__main__":

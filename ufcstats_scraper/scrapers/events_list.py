@@ -173,39 +173,39 @@ def scrape_events_list() -> None:
 
     try:
         db = LinksDB()
-    except (DBNotSetupError, SqliteError) as exc:
+    except (DBNotSetupError, SqliteError):
         logger.exception("Failed to create DB object")
         console.danger("Failed!")
-        raise exc
+        raise
 
     scraper = EventsListScraper(db)
     try:
         scraper.scrape()
         console.success("Done!")
         console.success(f"Scraped data for {len(scraper.scraped_data)} events.")
-    except ScraperError as exc:
+    except ScraperError:
         logger.exception("Failed to scrape events list")
         console.danger("Failed!")
         console.danger("No data was scraped.")
-        raise exc
+        raise
 
     console.print("Saving scraped data...")
     try:
         scraper.save_json()
         console.success("Done!")
-    except OSError as exc:
+    except OSError:
         logger.exception("Failed to save data to JSON")
         console.danger("Failed!")
-        raise exc
+        raise
 
     console.print("Inserting event data into DB...")
     try:
         scraper.db_insert_events()
         console.success("Done!")
-    except SqliteError as exc:
+    except SqliteError:
         logger.exception("Failed to insert event data into DB")
         console.danger("Failed!")
-        raise exc
+        raise
 
 
 if __name__ == "__main__":
