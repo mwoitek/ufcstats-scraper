@@ -129,7 +129,7 @@ class EventDetailsScraper:
                 fight = EventDetailsScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
-                logger.debug(f"Row: {row}")
+                logger.debug("Row: %s", row)
                 continue
             fights.append(fight)
 
@@ -153,7 +153,7 @@ class EventDetailsScraper:
         try:
             EventDetailsScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
-            logger.info(f"Directory {EventDetailsScraper.DATA_DIR} already exists")
+            logger.info("Directory %s already exists", EventDetailsScraper.DATA_DIR)
 
         out_data = self.scraped_data.model_dump(by_alias=True, exclude_none=True)
         file_name = self.link.split("/")[-1]
@@ -239,7 +239,7 @@ def scrape_event(event: DBEvent) -> Event:
         console.success(f"Scraped data for {num_fights} fights.")
     except ScraperError:
         logger.exception("Failed to scrape event details")
-        logger.debug(f"Event: {event}")
+        logger.debug("Event: %s", event)
         console.danger("Failed!")
         console.danger("No data was scraped.")
 

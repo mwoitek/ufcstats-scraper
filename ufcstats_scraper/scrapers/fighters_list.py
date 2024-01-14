@@ -163,7 +163,7 @@ class FightersListScraper:
                 fighter = FightersListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
-                logger.debug(f"Row: {row}")
+                logger.debug("Row: %s", row)
                 continue
             scraped_data.append(fighter)
 
@@ -182,7 +182,7 @@ class FightersListScraper:
         try:
             FightersListScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
-            logger.info(f"Directory {FightersListScraper.DATA_DIR} already exists")
+            logger.info("Directory %s already exists", FightersListScraper.DATA_DIR)
 
         out_data = [fighter.model_dump(by_alias=True, exclude_none=True) for fighter in self.scraped_data]
         out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
@@ -216,7 +216,7 @@ def scrape_letter(letter: str) -> list[Fighter]:
         console.success("Done!")
         console.success(f"Scraped data for {len(scraper.scraped_data)} fighters.")
     except ScraperError:
-        logger.exception(f"Failed to scrape data for {letter_upper}")
+        logger.exception("Failed to scrape data for %s", letter_upper)
         console.danger("Failed!")
         console.danger("No data was scraped.")
         raise
@@ -226,7 +226,7 @@ def scrape_letter(letter: str) -> list[Fighter]:
         scraper.save_json()
         console.success("Done!")
     except OSError:
-        logger.exception(f"Failed to save data to JSON for {letter_upper}")
+        logger.exception("Failed to save data to JSON for %s", letter_upper)
         console.danger("Failed!")
         raise
 

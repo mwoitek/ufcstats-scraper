@@ -45,7 +45,7 @@ def get_unique_fighters(fights: Collection["Fight"]) -> set["EventFighter"]:
     for fight in fights:
         fighters.add(fight.fighter_1)
         fighters.add(fight.fighter_2)
-    logger.info(f"Got {len(fighters)} unique fighters from {len(fights)} fights")
+    logger.info("Got %d unique fighters from %d fights", len(fighters), len(fights))
     return fighters
 
 
@@ -83,22 +83,22 @@ class LinksDB:
         return self.cur.fetchone() is not None
 
     def insert_events(self, events: Collection["ListEvent"]) -> None:
-        logger.info(f"Got {len(events)} events to insert into DB")
+        logger.info("Got %d events to insert into DB", len(events))
         query = "INSERT INTO event (link, name) VALUES (:link, :name)"
         new_events = filter(lambda e: not self.link_exists("event", e.link), events)
         for event in new_events:
             params = {"link": event.link, "name": event.name}
             self.cur.execute(query, params)
-            logger.debug(f"New event: {params}")
+            logger.debug("New event: %s", params)
 
     def insert_fighters(self, fighters: Collection["ListFighter"]) -> None:
-        logger.info(f"Got {len(fighters)} fighters to insert into DB")
+        logger.info("Got %d fighters to insert into DB", len(fighters))
         query = "INSERT INTO fighter (link, name) VALUES (:link, :name)"
         new_fighters = filter(lambda f: not self.link_exists("fighter", f.link), fighters)
         for fighter in new_fighters:
             params = {"link": fighter.link, "name": fighter.name}
             self.cur.execute(query, params)
-            logger.debug(f"New fighter: {params}")
+            logger.debug("New fighter: %s", params)
 
     @staticmethod
     def build_read_query(
@@ -130,7 +130,7 @@ class LinksDB:
         if isinstance(limit, int):
             query = f"{query} LIMIT {limit}"
 
-        logger.debug(f"Built read query: {query}")
+        logger.debug("Built read query: %s", query)
         return query
 
     def read_events(
@@ -148,7 +148,7 @@ class LinksDB:
             limit=limit,
         )
         events = [DBEvent(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(events)} events from DB")
+        logger.info("Read %d events from DB", len(events))
         return events
 
     def read_fighters(
@@ -163,17 +163,17 @@ class LinksDB:
             limit=limit,
         )
         fighters = [DBFighter(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(fighters)} fighters from DB")
+        logger.info("Read %d fighters from DB", len(fighters))
         return fighters
 
     def read_fighter_ids(self, fighters: Collection["EventFighter"]) -> dict["EventFighter", int]:
         fighter_ids: dict["EventFighter", int] = {}
-        logger.info(f"Need to find IDs for {len(fighters)} fighters")
+        logger.info("Need to find IDs for %d fighters", len(fighters))
         query = "SELECT id FROM fighter WHERE link = :link"
         for fighter in fighters:
             self.cur.execute(query, {"link": fighter.link})
             fighter_ids[fighter] = self.cur.fetchone()[0]
-        logger.info(f"Found IDs for {len(fighter_ids)} fighters")
+        logger.info("Found IDs for %d fighters", len(fighter_ids))
         return fighter_ids
 
     def read_fights(
@@ -209,7 +209,7 @@ class LinksDB:
             query = f"{query} LIMIT {limit}"
 
         fights = [DBFight(*row) for row in self.cur.execute(query)]
-        logger.info(f"Read {len(fights)} fights from DB")
+        logger.info("Read %d fights from DB", len(fights))
         return fights
 
     def update_status(self, table: TableName, id: int, tried: bool, success: bool | None) -> None:
@@ -219,15 +219,15 @@ class LinksDB:
         )
         params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
         self.cur.execute(query, params)
-        logger.info(f"Update {table} table")
-        logger.debug(f"New status: {params}")
+        logger.info("Update %s table", table)
+        logger.debug("New status: %s", params)
 
     def filter_fight_data(
         self, fights: Collection["Fight"]
     ) -> tuple[Collection["Fight"], dict["EventFighter", int]]:
-        logger.info(f"Got {len(fights)} fights to filter")
+        logger.info("Got %d fights to filter", len(fights))
         new_fights = [fight for fight in fights if not self.link_exists("fight", fight.link)]
-        logger.info(f"{len(new_fights)} out of {len(fights)} fights are new")
+        logger.info("%d out of %d fights are new", len(new_fights), len(fights))
         unique_fighters = get_unique_fighters(new_fights)
         fighter_ids = self.read_fighter_ids(unique_fighters)
         return new_fights, fighter_ids
@@ -238,7 +238,7 @@ class LinksDB:
         event_id: int,
         fighter_ids: dict["EventFighter", int],
     ) -> None:
-        logger.info(f"Got {len(fights)} fights to insert into DB")
+        logger.info("Got %d fights to insert into DB", len(fights))
         query = (
             "INSERT INTO fight (link, event_id, fighter_1_id, fighter_2_id) "
             "VALUES (:link, :event_id, :fighter_1_id, :fighter_2_id)"
@@ -251,10 +251,10 @@ class LinksDB:
                 "fighter_2_id": fighter_ids[fight.fighter_2],
             }
             self.cur.execute(query, params)
-            logger.debug(f"New fight: {params}")
+            logger.debug("New fight: %s", params)
 
     def update_fighters_status(self, fighter_ids: dict["EventFighter", int]) -> None:
-        logger.info(f"Got {len(fighter_ids)} fighters to update")
+        logger.info("Got %d fighters to update", len(fighter_ids))
         for id in fighter_ids.values():
             self.update_status("fighter", id, False, None)
 

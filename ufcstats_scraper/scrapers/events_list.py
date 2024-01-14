@@ -138,7 +138,7 @@ class EventsListScraper:
                 event = EventsListScraper.scrape_row(row)
             except (MissingHTMLElementError, ValidationError):
                 logger.exception("Failed to scrape row")
-                logger.debug(f"Row: {row}")
+                logger.debug("Row: %s", row)
                 continue
             if event.date < today:
                 scraped_data.append(event)
@@ -156,7 +156,7 @@ class EventsListScraper:
         try:
             EventsListScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
-            logger.info(f"Directory {EventsListScraper.DATA_DIR} already exists")
+            logger.info("Directory %s already exists", EventsListScraper.DATA_DIR)
 
         out_data = [event.model_dump(exclude_none=True) for event in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"

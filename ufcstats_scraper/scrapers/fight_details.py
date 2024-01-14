@@ -672,7 +672,7 @@ class FightDetailsScraper:
         try:
             FightDetailsScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
-            logger.info(f"Directory {FightDetailsScraper.DATA_DIR} already exists")
+            logger.info("Directory %s already exists", FightDetailsScraper.DATA_DIR)
 
         out_data = self.scraped_data.model_dump()
         file_name = self.link.split("/")[-1]
@@ -745,7 +745,7 @@ def scrape_fight(fight: DBFight) -> Fight:
         console.success("Done!")
     except ScraperError:
         logger.exception("Failed to scrape fight details")
-        logger.debug(f"Fight: {fight}")
+        logger.debug("Fight: %s", fight)
         console.danger("Failed!")
         console.danger("No data was scraped.")
 
