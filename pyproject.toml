@@ -10,7 +10,7 @@ target-version = "py311"
 unsafe-fixes = true
 
 [tool.ruff.lint]
-select = ["F841", "I", "TRY201", "UP"]
+select = ["F841", "I", "PLR0402", "PLR1722", "RET502", "TRY201", "UP"]
 
 [tool.ruff.lint.isort]
 case-sensitive = true

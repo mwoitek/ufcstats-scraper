@@ -1,6 +1,6 @@
 import sqlite3
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.db.common import DB_PATH, SQL_SCRIPTS_DIR, TABLES, TableName
 

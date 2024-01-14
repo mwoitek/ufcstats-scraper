@@ -6,7 +6,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskProgressColumn, TextColumn
 from rich.theme import Theme
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 
 
 class CustomConsole:

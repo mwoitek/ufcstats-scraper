@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Self, cast
 
 from pydantic import AnyUrl
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger
 from ufcstats_scraper.db.checks import is_db_setup
 from ufcstats_scraper.db.common import DB_PATH, LinkSelection, TableName

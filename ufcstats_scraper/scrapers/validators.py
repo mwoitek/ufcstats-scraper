@@ -19,7 +19,7 @@ def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl
 
 def convert_time(time: str | None, handler: ValidatorFunctionWrapHandler) -> timedelta | None:
     if time is None:
-        return
+        return None
     match = re.match(r"(\d{1,2}):(\d{2})", time)
     assert isinstance(match, re.Match)
     converted = timedelta(minutes=int(match.group(1)), seconds=int(match.group(2)))
@@ -28,7 +28,7 @@ def convert_time(time: str | None, handler: ValidatorFunctionWrapHandler) -> tim
 
 def fill_height(height: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if height is None:
-        return
+        return None
     match = re.match(r"(\d{1})' (\d{1,2})\"", height.strip())
     assert isinstance(match, re.Match)
     feet, inches = int(match.group(1)), int(match.group(2))
@@ -37,7 +37,7 @@ def fill_height(height: str | None, handler: ValidatorFunctionWrapHandler) -> in
 
 def fill_weight(weight: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if weight is None:
-        return
+        return None
     match = re.match(r"(\d+) lbs[.]", weight.strip())
     assert isinstance(match, re.Match)
     return handler(int(match.group(1)))
@@ -45,7 +45,7 @@ def fill_weight(weight: str | None, handler: ValidatorFunctionWrapHandler) -> in
 
 def fill_reach(reach: str | None, handler: ValidatorFunctionWrapHandler) -> int | None:
     if reach is None:
-        return
+        return None
     match = re.match(r"(\d+)([.]0)?\"", reach.strip())
     assert isinstance(match, re.Match)
     return handler(int(match.group(1)))
@@ -53,7 +53,7 @@ def fill_reach(reach: str | None, handler: ValidatorFunctionWrapHandler) -> int 
 
 def fill_ratio(percent: str | None, handler: ValidatorFunctionWrapHandler) -> float | None:
     if percent is None:
-        return
+        return None
     match = re.match(r"(\d+)%", percent.strip())
     assert isinstance(match, re.Match)
     ratio = int(match.group(1)) / 100

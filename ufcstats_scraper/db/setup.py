@@ -1,4 +1,5 @@
 import sqlite3
+import sys
 from argparse import ArgumentParser
 
 from pydantic import ValidationError, validate_call
@@ -86,4 +87,4 @@ if __name__ == "__main__":
     except (FileNotFoundError, ValidationError, sqlite3.Error):
         console.quiet = False
         console.print_exception()
-        exit(1)
+        sys.exit(1)

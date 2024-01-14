@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal, get_args
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 
 LinkSelection = Literal["all", "failed", "untried"]
 TableName = Literal["event", "fighter", "fight"]

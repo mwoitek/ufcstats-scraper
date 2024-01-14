@@ -1,10 +1,11 @@
 import argparse
+import sys
 from sqlite3 import Error as SqliteError
 from typing import get_args
 
 from pydantic import ValidationError
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
@@ -131,4 +132,4 @@ try:
 except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError, ValueError):
     console.quiet = False
     console.print_exception()
-    exit(1)
+    sys.exit(1)

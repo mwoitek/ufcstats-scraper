@@ -1,3 +1,4 @@
+import sys
 from argparse import ArgumentParser
 from json import dump
 from os import mkdir
@@ -10,7 +11,7 @@ from bs4 import BeautifulSoup, ResultSet, Tag
 from pydantic import Field, PositiveFloat, PositiveInt, ValidationError, validate_call
 from requests.exceptions import RequestException
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.checks import is_db_setup, is_table_empty
@@ -369,4 +370,4 @@ if __name__ == "__main__":
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
-        exit(1)
+        sys.exit(1)

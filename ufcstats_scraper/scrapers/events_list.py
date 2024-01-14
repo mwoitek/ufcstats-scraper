@@ -1,5 +1,6 @@
 import datetime
 import re
+import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from json import dump
@@ -12,7 +13,7 @@ from bs4 import BeautifulSoup, ResultSet, Tag
 from pydantic import ValidationError, ValidatorFunctionWrapHandler, field_validator, model_validator
 from requests.exceptions import RequestException
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger, CustomModel
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.db import LinksDB
@@ -220,4 +221,4 @@ if __name__ == "__main__":
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
-        exit(1)
+        sys.exit(1)

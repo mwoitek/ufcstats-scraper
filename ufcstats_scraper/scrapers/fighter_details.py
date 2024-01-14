@@ -1,4 +1,5 @@
 import re
+import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from datetime import date, datetime
@@ -23,7 +24,7 @@ from pydantic import (
 )
 from requests.exceptions import RequestException
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.checks import is_db_setup, is_table_empty
@@ -100,7 +101,7 @@ class PersonalInfo(CustomModel):
         handler: ValidatorFunctionWrapHandler,
     ) -> date | None:
         if date_of_birth is None:
-            return
+            return None
         converted = datetime.strptime(date_of_birth.strip(), "%b %d, %Y").date()
         return handler(converted)
 
@@ -128,20 +129,20 @@ class Fighter(CustomModel):
     @classmethod
     def check_personal_info(cls, personal_info: PersonalInfo | None) -> PersonalInfo | None:
         if personal_info is None:
-            return
+            return None
         if len(personal_info.model_dump(exclude_none=True)) == 0:
-            return
+            return None
         return personal_info
 
     @field_validator("career_stats")
     @classmethod
     def check_career_stats(cls, career_stats: CareerStats | None) -> CareerStats | None:
         if career_stats is None:
-            return
+            return None
         # For some fighters, every career stat is equal to zero. This is
         # garbage data, and will be disregarded.
         if all(stat == 0.0 for stat in career_stats.model_dump().values()):
-            return
+            return None
         return career_stats
 
     def to_dict(self, redundant=True) -> dict[str, Any]:
@@ -480,4 +481,4 @@ if __name__ == "__main__":
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
-        exit(1)
+        sys.exit(1)

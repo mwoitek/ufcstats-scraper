@@ -1,4 +1,5 @@
 import re
+import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from datetime import timedelta
@@ -28,7 +29,7 @@ from pydantic import (
 from pydantic.functional_serializers import PlainSerializer
 from requests.exceptions import RequestException
 
-import ufcstats_scraper.config as config
+from ufcstats_scraper import config
 from ufcstats_scraper.common import CustomLogger, CustomModel, progress
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.checks import is_db_setup, is_table_empty
@@ -195,7 +196,7 @@ class Box(CustomModel):
         handler: ValidatorFunctionWrapHandler,
     ) -> list[BonusType] | None:
         if len(img_names) == 0:
-            return
+            return None
         bonuses = []
         for bonus in map(lambda n: n.split(".")[0], img_names):
             match bonus:
@@ -560,7 +561,7 @@ class FightDetailsScraper:
 
     def scrape_totals(self) -> Totals | None:
         if not hasattr(self, "totals_tables"):
-            return
+            return None
 
         OPTIONAL_FIELDS = ["significant_strikes_percentage", "takedowns_percentage", "control_time"]
         COUNT_FIELDS = ["significant_strikes", "total_strikes", "takedowns"]
@@ -602,7 +603,7 @@ class FightDetailsScraper:
 
     def scrape_significant_strikes(self) -> SignificantStrikes | None:
         if not hasattr(self, "strikes_tables"):
-            return
+            return None
 
         FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
         processed_tables: list[FightersSignificantStrikes] = []
@@ -859,4 +860,4 @@ if __name__ == "__main__":
         logger.exception("Failed to run main function")
         console.quiet = False
         console.print_exception()
-        exit(1)
+        sys.exit(1)
