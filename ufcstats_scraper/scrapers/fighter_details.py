@@ -157,8 +157,8 @@ class Fighter(CustomModel):
         if redundant:
             return flat_dict
 
-        REDUNDANT_KEYS = ["nickname", "wins", "losses", "draws", "height", "weight", "reach", "stance"]
-        keys_to_remove = filter(lambda k: k in flat_dict, REDUNDANT_KEYS)
+        redundant_keys = ["nickname", "wins", "losses", "draws", "height", "weight", "reach", "stance"]
+        keys_to_remove = filter(lambda k: k in flat_dict, redundant_keys)
         for key in keys_to_remove:
             del flat_dict[key]
 

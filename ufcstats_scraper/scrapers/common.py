@@ -16,17 +16,17 @@ def fix_consecutive_spaces(s: str) -> str:
 EventLink = Annotated[
     HttpUrl,
     AfterValidator(check_link("event")),
-    PlainSerializer(lambda l: str(l), return_type=str),
+    PlainSerializer(lambda link: str(link), return_type=str),
 ]
 FighterLink = Annotated[
     HttpUrl,
     AfterValidator(check_link("fighter")),
-    PlainSerializer(lambda l: str(l), return_type=str),
+    PlainSerializer(lambda link: str(link), return_type=str),
 ]
 FightLink = Annotated[
     HttpUrl,
     AfterValidator(check_link("fight")),
-    PlainSerializer(lambda l: str(l), return_type=str),
+    PlainSerializer(lambda link: str(link), return_type=str),
 ]
 
 CleanName = Annotated[str, AfterValidator(fix_consecutive_spaces)]

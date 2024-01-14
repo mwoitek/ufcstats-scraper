@@ -569,16 +569,16 @@ class FightDetailsScraper:
         if not hasattr(self, "totals_tables"):
             return None
 
-        OPTIONAL_FIELDS = ["significant_strikes_percentage", "takedowns_percentage", "control_time"]
-        COUNT_FIELDS = ["significant_strikes", "total_strikes", "takedowns"]
-        INT_FIELDS = ["knockdowns", "submission_attempts", "reversals"]
+        optional_fields = ["significant_strikes_percentage", "takedowns_percentage", "control_time"]
+        count_fields = ["significant_strikes", "total_strikes", "takedowns"]
+        int_fields = ["knockdowns", "submission_attempts", "reversals"]
         processed_tables: list[FightersTotals] = []
 
         for raw_table in self.totals_tables:
             data_dict_1: dict[str, Any] = {}
             data_dict_2: dict[str, Any] = {}
 
-            for field, raw_value in zip(OPTIONAL_FIELDS, raw_table[:3], strict=True):
+            for field, raw_value in zip(optional_fields, raw_table[:3], strict=True):
                 value_1, value_2 = raw_value.split(" ")
 
                 data_dict_1[field] = value_1.strip("-")
@@ -589,13 +589,13 @@ class FightDetailsScraper:
                 if not data_dict_2[field]:
                     del data_dict_2[field]
 
-            for field, raw_value in zip(COUNT_FIELDS, raw_table[3:6], strict=True):
+            for field, raw_value in zip(count_fields, raw_table[3:6], strict=True):
                 matches = re.findall(r"\d+ of \d+", raw_value)
                 matches = cast(list[str], matches)
                 data_dict_1[field] = Count.model_validate({"count_str": matches[0]})
                 data_dict_2[field] = Count.model_validate({"count_str": matches[1]})
 
-            for field, raw_value in zip(INT_FIELDS, raw_table[6:], strict=True):
+            for field, raw_value in zip(int_fields, raw_table[6:], strict=True):
                 data_dict_1[field], data_dict_2[field] = raw_value.split(" ")
 
             processed_tables.append(
@@ -611,7 +611,7 @@ class FightDetailsScraper:
         if not hasattr(self, "strikes_tables"):
             return None
 
-        FIELDS = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
+        fields = ["total", "head", "body", "leg", "distance", "clinch", "ground"]
         processed_tables: list[FightersSignificantStrikes] = []
 
         for raw_table in self.strikes_tables:
@@ -625,7 +625,7 @@ class FightDetailsScraper:
             if not data_dict_2["percentage"]:
                 del data_dict_2["percentage"]
 
-            for field, raw_value in zip(FIELDS, raw_table[1:], strict=True):
+            for field, raw_value in zip(fields, raw_table[1:], strict=True):
                 matches = re.findall(r"\d+ of \d+", raw_value)
                 matches = cast(list[str], matches)
                 data_dict_1[field] = Count.model_validate({"count_str": matches[0]})

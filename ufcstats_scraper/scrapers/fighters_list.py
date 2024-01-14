@@ -132,7 +132,7 @@ class FightersListScraper:
         data_dict: dict[str, Any] = {"link": anchor.get("href")}
 
         # Scrape all other fields except for current_champion
-        FIELDS = [
+        fields = [
             "first_name",
             "last_name",
             "nickname",
@@ -145,7 +145,7 @@ class FightersListScraper:
             "draws",
         ]
         cols_text = (c.get_text().strip().strip("-") for c in cols[:-1])
-        pairs = filter(lambda p: p[1], zip(FIELDS, cols_text, strict=True))
+        pairs = filter(lambda p: p[1], zip(fields, cols_text, strict=True))
         data_dict.update(pairs)
 
         # Scrape current_champion
