@@ -9,10 +9,7 @@ class ScraperError(Exception):
 
 class NoSoupError(ScraperError):
     def __init__(self, link: str | HttpUrl | None = None) -> None:
-        if link is None:
-            message = "Cannot do scraping without the soup"
-        else:
-            message = f"Failed to get soup for {link}"
+        message = "Cannot do scraping without the soup" if link is None else f"Failed to get soup for {link}"
         self.message = message
         super().__init__(self.message)
 

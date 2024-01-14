@@ -105,7 +105,8 @@ class Result(CustomModel):
             case "NC":
                 result = "No contest"
             case _:
-                raise ValueError(f"invalid result: {raw_result}")
+                msg = f"invalid result: {raw_result}"
+                raise ValueError(msg)
         return handler(result)
 
     @model_validator(mode="after")
@@ -198,7 +199,7 @@ class Box(CustomModel):
         if len(img_names) == 0:
             return None
         bonuses = []
-        for bonus in map(lambda n: n.split(".")[0], img_names):
+        for bonus in (n.split(".")[0] for n in img_names):
             match bonus:
                 case "fight":
                     bonuses.append("Fight of the Night")
@@ -209,7 +210,8 @@ class Box(CustomModel):
                 case "ko":
                     bonuses.append("KO of the Night")
                 case _:
-                    raise ValueError(f"invalid bonus: {bonus}")
+                    msg = f"invalid bonus: {bonus}"
+                    raise ValueError(msg)
         return handler(bonuses)
 
     @model_validator(mode="after")
@@ -447,11 +449,13 @@ class FightDetailsScraper:
 
         div = self.soup.find("div", class_="b-fight-details__persons")
         if not isinstance(div, Tag):
-            raise MissingHTMLElementError("Fighters div (div.b-fight-details__persons)")
+            msg = "Fighters div (div.b-fight-details__persons)"
+            raise MissingHTMLElementError(msg)
 
         is_: ResultSet[Tag] = div.find_all("i", class_="b-fight-details__person-status")
         if len(is_) != 2:
-            raise MissingHTMLElementError("Idiomatic tags (i.b-fight-details__person-status)")
+            msg = "Idiomatic tags (i.b-fight-details__person-status)"
+            raise MissingHTMLElementError(msg)
 
         data_dict = {"fighter_1": is_[0].get_text(), "fighter_2": is_[1].get_text()}
         return Result.model_validate(data_dict)
@@ -462,12 +466,14 @@ class FightDetailsScraper:
 
         box = self.soup.find("div", class_="b-fight-details__fight")
         if not isinstance(box, Tag):
-            raise MissingHTMLElementError("Box (div.b-fight-details__fight)")
+            msg = "Box (div.b-fight-details__fight)"
+            raise MissingHTMLElementError(msg)
 
         # Scrape description
         description = box.find("i", class_="b-fight-details__fight-title")
         if not isinstance(description, Tag):
-            raise MissingHTMLElementError("Description tag (i.b-fight-details__fight-title)")
+            msg = "Description tag (i.b-fight-details__fight-title)"
+            raise MissingHTMLElementError(msg)
         data_dict: dict[str, Any] = {"description": description.get_text().strip()}
 
         # Scrape data from images
@@ -483,15 +489,15 @@ class FightDetailsScraper:
 
         ps: ResultSet[Tag] = box.find_all("p", class_="b-fight-details__text")
         if len(ps) != 2:
-            raise MissingHTMLElementError("Paragraphs (p.b-fight-details__text)")
+            msg = "Paragraphs (p.b-fight-details__text)"
+            raise MissingHTMLElementError(msg)
 
         # Scrape first line
         class_re = re.compile("b-fight-details__text-item(_first)?")
         is_: ResultSet[Tag] = ps[0].find_all("i", class_=class_re)
         if len(is_) != 5:
-            raise MissingHTMLElementError(
-                "Idiomatic tags (i.b-fight-details__text-item_first, i.b-fight-details__text-item)"
-            )
+            msg = "Idiomatic tags (i.b-fight-details__text-item_first, i.b-fight-details__text-item)"
+            raise MissingHTMLElementError(msg)
 
         for i in is_:
             text = fix_consecutive_spaces(i.get_text().strip())
@@ -518,7 +524,8 @@ class FightDetailsScraper:
 
         table_bodies: ResultSet[Tag] = self.soup.find_all("tbody")
         if len(table_bodies) != 4:
-            raise MissingHTMLElementError("Table bodies (tbody)")
+            msg = "Table bodies (tbody)"
+            raise MissingHTMLElementError(msg)
 
         # Process "Totals" tables
         cells_1: ResultSet[Tag] = table_bodies[0].find_all("td")
@@ -816,7 +823,8 @@ def scrape_fight_details(
     if ok_count == 0:
         logger.error("Failed to scrape data for all fights")
         console.danger("No data was scraped.")
-        raise NoScrapedDataError("http://ufcstats.com/fight-details/")
+        msg = "http://ufcstats.com/fight-details/"
+        raise NoScrapedDataError(msg)
 
     msg_count = "all fights" if num_fights == ok_count else f"{ok_count} out of {num_fights} fight(s)"
     console.info(f"Successfully scraped data for {msg_count}.")

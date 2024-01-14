@@ -145,7 +145,7 @@ class Fighter(CustomModel):
             return None
         return career_stats
 
-    def to_dict(self, redundant=True) -> dict[str, Any]:
+    def to_dict(self, redundant: bool = True) -> dict[str, Any]:
         flat_dict: dict[str, Any] = {}
 
         orig_dict = self.model_dump(by_alias=True, exclude_none=True)
@@ -196,13 +196,15 @@ class FighterDetailsScraper:
         # Scrape full name
         name_span = self.soup.find("span", class_="b-content__title-highlight")
         if not isinstance(name_span, Tag):
-            raise MissingHTMLElementError("Name span (span.b-content__title-highlight)")
+            msg = "Name span (span.b-content__title-highlight)"
+            raise MissingHTMLElementError(msg)
         data_dict: dict[str, Any] = {"name": name_span.get_text()}
 
         # Scrape nickname
         nickname_p = self.soup.find("p", class_="b-content__Nickname")
         if not isinstance(nickname_p, Tag):
-            raise MissingHTMLElementError("Nickname paragraph (p.b-content__Nickname)")
+            msg = "Nickname paragraph (p.b-content__Nickname)"
+            raise MissingHTMLElementError(msg)
         data_dict["nickname"] = nickname_p.get_text().strip()
         if not data_dict["nickname"]:
             del data_dict["nickname"]
@@ -210,7 +212,8 @@ class FighterDetailsScraper:
         # Scrape record
         record_span = self.soup.find("span", class_="b-content__title-record")
         if not isinstance(record_span, Tag):
-            raise MissingHTMLElementError("Record span (span.b-content__title-record)")
+            msg = "Record span (span.b-content__title-record)"
+            raise MissingHTMLElementError(msg)
         data_dict["record"] = record_span.get_text()
 
         return Header.model_validate(data_dict)
@@ -221,11 +224,13 @@ class FighterDetailsScraper:
 
         box_list = self.soup.find("ul", class_="b-list__box-list")
         if not isinstance(box_list, Tag):
-            raise MissingHTMLElementError("Box list (ul.b-list__box-list)")
+            msg = "Box list (ul.b-list__box-list)"
+            raise MissingHTMLElementError(msg)
 
         items: ResultSet[Tag] = box_list.find_all("li")
         if len(items) != 5:
-            raise MissingHTMLElementError("List items (li)")
+            msg = "List items (li)"
+            raise MissingHTMLElementError(msg)
 
         data_dict: dict[str, Any] = {}
 
@@ -244,11 +249,13 @@ class FighterDetailsScraper:
 
         box = self.soup.find("div", class_="b-list__info-box-left clearfix")
         if not isinstance(box, Tag):
-            raise MissingHTMLElementError("Box (div.b-list__info-box-left.clearfix)")
+            msg = "Box (div.b-list__info-box-left.clearfix)"
+            raise MissingHTMLElementError(msg)
 
         items: ResultSet[Tag] = box.find_all("li")
         if len(items) != 9:
-            raise MissingHTMLElementError("List items (li)")
+            msg = "List items (li)"
+            raise MissingHTMLElementError(msg)
 
         data_dict: dict[str, Any] = {}
 
@@ -281,7 +288,7 @@ class FighterDetailsScraper:
 
         return self.scraped_data
 
-    def save_json(self, redundant=True) -> None:
+    def save_json(self, redundant: bool = True) -> None:
         if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
@@ -437,7 +444,8 @@ def scrape_fighter_details(
     if ok_count == 0:
         logger.error("Failed to scrape data for all fighters")
         console.danger("No data was scraped.")
-        raise NoScrapedDataError("http://ufcstats.com/fighter-details/")
+        msg = "http://ufcstats.com/fighter-details/"
+        raise NoScrapedDataError(msg)
 
     msg_count = "all fighters" if num_fighters == ok_count else f"{ok_count} out of {num_fighters} fighter(s)"
     console.info(f"Successfully scraped data for {msg_count}.")

@@ -83,11 +83,13 @@ class EventDetailsScraper:
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            raise MissingHTMLElementError("Table body (tbody)")
+            msg = "Table body (tbody)"
+            raise MissingHTMLElementError(msg)
 
         rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
-            raise MissingHTMLElementError("Table rows (tr)")
+            msg = "Table rows (tr)"
+            raise MissingHTMLElementError(msg)
 
         self.rows = rows
         return self.rows
@@ -102,12 +104,14 @@ class EventDetailsScraper:
         try:
             col = cols[1]
         except IndexError:
-            raise MissingHTMLElementError("2nd column (td)") from None
+            msg = "2nd column (td)"
+            raise MissingHTMLElementError(msg) from None
 
         # Scrape fighter links and names
         anchors: ResultSet[Tag] = col.find_all("a")
         if len(anchors) != 2:
-            raise MissingHTMLElementError("Anchor tags (a)")
+            msg = "Anchor tags (a)"
+            raise MissingHTMLElementError(msg)
         for i, anchor in enumerate(anchors, start=1):
             data_dict[f"fighter_{i}"] = {"link": anchor.get("href"), "name": anchor.get_text()}
 
@@ -323,7 +327,8 @@ def scrape_event_details(
     if ok_count == 0:
         logger.error("Failed to scrape data for all events")
         console.danger("No data was scraped.")
-        raise NoScrapedDataError("http://ufcstats.com/event-details/")
+        msg = "http://ufcstats.com/event-details/"
+        raise NoScrapedDataError(msg)
 
     msg_count = "all events" if num_events == ok_count else f"{ok_count} out of {num_events} event(s)"
     console.info(f"Successfully scraped data for {msg_count}.")

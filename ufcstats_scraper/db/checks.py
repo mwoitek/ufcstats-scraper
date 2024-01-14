@@ -11,7 +11,7 @@ logger = CustomLogger(
 
 
 def has_expected_tables() -> bool:
-    table_names = map(lambda n: f"'{n}'", TABLES)
+    table_names = (f"'{n}'" for n in TABLES)
     tables_list = "(" + ", ".join(table_names) + ")"
     query = f"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN {tables_list}"
     logger.debug(f"Query: {query}")
@@ -25,7 +25,7 @@ def read_script_columns(table: TableName) -> set[str]:
     script_path = SQL_SCRIPTS_DIR / f"create_{table}.sql"
     with open(script_path) as sql_file:
         lines = [line for line in sql_file if line.startswith(" ")]
-    script_columns = set(line.lstrip().split(" ")[0] for line in lines)
+    script_columns = {line.lstrip().split(" ")[0] for line in lines}
     logger.debug(f"Script columns for {table} table: {script_columns}")
     return script_columns
 
@@ -34,7 +34,7 @@ def read_db_columns(table: TableName) -> set[str]:
     query = f"SELECT name FROM pragma_table_info('{table}')"
     logger.debug(f"Query: {query}")
     with sqlite3.connect(DB_PATH) as conn:
-        db_columns: set[str] = set(row[0] for row in conn.execute(query))
+        db_columns: set[str] = {row[0] for row in conn.execute(query)}
     logger.debug(f"DB columns for {table} table: {db_columns}")
     return db_columns
 

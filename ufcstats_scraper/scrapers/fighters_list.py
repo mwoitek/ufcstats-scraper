@@ -72,7 +72,8 @@ class Fighter(CustomModel):
     @model_validator(mode="after")
     def check_name(self) -> Self:
         if not self.name:
-            raise ValueError("fighter has no name")
+            msg = "fighter has no name"
+            raise ValueError(msg)
         return self
 
 
@@ -90,10 +91,12 @@ class FightersListScraper:
         try:
             response = requests.get(FightersListScraper.BASE_URL, params=params)
         except RequestException as exc:
-            raise NoSoupError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}") from exc
+            msg = f"{FightersListScraper.BASE_URL}?{urlencode(params)}"
+            raise NoSoupError(msg) from exc
 
         if response.status_code != requests.codes["ok"]:
-            raise NoSoupError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}")
+            msg = f"{FightersListScraper.BASE_URL}?{urlencode(params)}"
+            raise NoSoupError(msg)
 
         self.soup = BeautifulSoup(response.text, "lxml")
         return self.soup
@@ -104,11 +107,13 @@ class FightersListScraper:
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            raise MissingHTMLElementError("Table body (tbody)")
+            msg = "Table body (tbody)"
+            raise MissingHTMLElementError(msg)
 
         rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
-            raise MissingHTMLElementError("Table rows (tr)")
+            msg = "Table rows (tr)"
+            raise MissingHTMLElementError(msg)
 
         self.rows = rows
         return self.rows
@@ -117,12 +122,14 @@ class FightersListScraper:
     def scrape_row(row: Tag) -> Fighter:
         cols: ResultSet[Tag] = row.find_all("td")
         if len(cols) != 11:
-            raise MissingHTMLElementError("Row columns (td)")
+            msg = "Row columns (td)"
+            raise MissingHTMLElementError(msg)
 
         # Scrape link
         anchor = cols[0].find("a")
         if not isinstance(anchor, Tag):
-            raise MissingHTMLElementError("Anchor tag (a)")
+            msg = "Anchor tag (a)"
+            raise MissingHTMLElementError(msg)
         data_dict: dict[str, Any] = {"link": anchor.get("href")}
 
         # Scrape all other fields except for current_champion
@@ -138,7 +145,7 @@ class FightersListScraper:
             "losses",
             "draws",
         ]
-        cols_text = map(lambda c: c.get_text().strip().strip("-"), cols[:-1])
+        cols_text = (c.get_text().strip().strip("-") for c in cols[:-1])
         pairs = filter(lambda p: p[1], zip(FIELDS, cols_text, strict=True))
         data_dict.update(pairs)
 
@@ -163,7 +170,8 @@ class FightersListScraper:
 
         if len(scraped_data) == 0:
             params = {"char": self.letter, "page": "all"}
-            raise NoScrapedDataError(f"{FightersListScraper.BASE_URL}?{urlencode(params)}")
+            msg = f"{FightersListScraper.BASE_URL}?{urlencode(params)}"
+            raise NoScrapedDataError(msg)
 
         self.scraped_data = scraped_data
         return self.scraped_data

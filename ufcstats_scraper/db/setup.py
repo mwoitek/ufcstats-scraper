@@ -1,3 +1,4 @@
+import contextlib
 import sqlite3
 import sys
 from argparse import ArgumentParser
@@ -15,10 +16,8 @@ class DBCreator:
         self.cur = self.conn.cursor()
 
     def __del__(self) -> None:
-        try:
+        with contextlib.suppress(AttributeError):
             self.conn.close()
-        except AttributeError:
-            pass
 
     @staticmethod
     def read_sql_script(script_name: str) -> str:

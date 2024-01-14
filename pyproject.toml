@@ -7,10 +7,26 @@ reportUnnecessaryTypeIgnoreComment = "information"
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-unsafe-fixes = true
+# unsafe-fixes = true
 
 [tool.ruff.lint]
-select = ["F841", "I", "PLR0402", "PLR1722", "RET502", "TRY201", "UP"]
+select = [
+  "C401",
+  "C417",
+  "EM",
+  "F401",
+  "F841",
+  "I",
+  "PLR0402",
+  "PLR1722",
+  "PTH",
+  "PYI036",
+  "RET502",
+  "SIM105",
+  "SIM108",
+  "TRY201",
+  "UP",
+]
 
 [tool.ruff.lint.isort]
 case-sensitive = true

@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Collection
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Self, cast
 
 from pydantic import AnyUrl
 
@@ -73,7 +73,7 @@ class LinksDB:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc: Any) -> bool:  # noqa: F841
+    def __exit__(self, *exc: object) -> bool:  # noqa: F841
         self.close()
         return False
 

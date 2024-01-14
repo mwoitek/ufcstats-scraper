@@ -90,11 +90,13 @@ class EventsListScraper:
 
         table_body = self.soup.find("tbody")
         if not isinstance(table_body, Tag):
-            raise MissingHTMLElementError("Table body (tbody)")
+            msg = "Table body (tbody)"
+            raise MissingHTMLElementError(msg)
 
         rows: ResultSet[Tag] = table_body.find_all("tr")
         if len(rows) == 0:
-            raise MissingHTMLElementError("Table rows (tr)")
+            msg = "Table rows (tr)"
+            raise MissingHTMLElementError(msg)
 
         self.rows = rows
         return self.rows
@@ -103,18 +105,21 @@ class EventsListScraper:
     def scrape_row(row: Tag) -> Event:
         cols: ResultSet[Tag] = row.find_all("td")
         if len(cols) != 2:
-            raise MissingHTMLElementError("Row columns (td)")
+            msg = "Row columns (td)"
+            raise MissingHTMLElementError(msg)
 
         # Scrape link and name
         anchor = cols[0].find("a")
         if not isinstance(anchor, Tag):
-            raise MissingHTMLElementError("Anchor tag (a)")
+            msg = "Anchor tag (a)"
+            raise MissingHTMLElementError(msg)
         data_dict: dict[str, Any] = {"link": anchor.get("href"), "name": anchor.get_text()}
 
         # Scrape date
         date_span = cols[0].find("span")
         if not isinstance(date_span, Tag):
-            raise MissingHTMLElementError("Date span (span)")
+            msg = "Date span (span)"
+            raise MissingHTMLElementError(msg)
         data_dict["date"] = date_span.get_text()
 
         # Scrape location

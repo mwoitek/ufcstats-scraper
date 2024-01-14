@@ -9,9 +9,11 @@ from pydantic import HttpUrl, ValidatorFunctionWrapHandler
 def check_link(type_: Literal["event", "fighter", "fight"]) -> Callable[[HttpUrl], HttpUrl]:
     def validator(link: HttpUrl) -> HttpUrl:
         if link.host is None or not link.host.endswith("ufcstats.com"):
-            raise ValueError("link has invalid host")
+            msg = "link has invalid host"
+            raise ValueError(msg)
         if link.path is None or not link.path.startswith(f"/{type_}-details/"):
-            raise ValueError("link has invalid path")
+            msg = "link has invalid path"
+            raise ValueError(msg)
         return link
 
     return validator
