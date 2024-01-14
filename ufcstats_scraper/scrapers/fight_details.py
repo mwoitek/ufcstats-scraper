@@ -6,7 +6,6 @@ from datetime import timedelta
 from itertools import chain
 from json import dump
 from math import isclose
-from os import mkdir
 from sqlite3 import Error as SqliteError
 from time import sleep
 from typing import Annotated, Any, Literal, Self, cast, get_args
@@ -671,14 +670,14 @@ class FightDetailsScraper:
             raise NoScrapedDataError
 
         try:
-            mkdir(FightDetailsScraper.DATA_DIR, mode=0o755)
+            FightDetailsScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
             logger.info(f"Directory {FightDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.model_dump()
         file_name = self.link.split("/")[-1]
         out_file = FightDetailsScraper.DATA_DIR / f"{file_name}.json"
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
         self.success = True

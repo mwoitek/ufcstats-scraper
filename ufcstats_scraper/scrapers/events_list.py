@@ -4,7 +4,6 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Callable
 from json import dump
-from os import mkdir
 from sqlite3 import Error as SqliteError
 from typing import Any, Self
 
@@ -155,13 +154,13 @@ class EventsListScraper:
             raise NoScrapedDataError
 
         try:
-            mkdir(EventsListScraper.DATA_DIR, mode=0o755)
+            EventsListScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
             logger.info(f"Directory {EventsListScraper.DATA_DIR} already exists")
 
         out_data = [event.model_dump(exclude_none=True) for event in self.scraped_data]
         out_file = EventsListScraper.DATA_DIR / "events_list.json"
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
         self.success = True

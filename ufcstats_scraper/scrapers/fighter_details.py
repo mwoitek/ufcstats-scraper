@@ -4,7 +4,6 @@ from argparse import ArgumentParser
 from collections.abc import Callable
 from datetime import date, datetime
 from json import dump
-from os import mkdir
 from sqlite3 import Error as SqliteError
 from time import sleep
 from typing import Any, Self, cast, get_args
@@ -293,14 +292,14 @@ class FighterDetailsScraper:
             raise NoScrapedDataError
 
         try:
-            mkdir(FighterDetailsScraper.DATA_DIR, mode=0o755)
+            FighterDetailsScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
             logger.info(f"Directory {FighterDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.to_dict(redundant=redundant)
         file_name = self.link.split("/")[-1]
         out_file = FighterDetailsScraper.DATA_DIR / f"{file_name}.json"
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
         self.success = True

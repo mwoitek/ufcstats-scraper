@@ -52,9 +52,9 @@ class Config(BaseModel):
     logger: Logger = Logger()
 
 
-def read_toml(file_path: str | Path) -> dict[str, Any]:
+def read_toml(file_path: Path) -> dict[str, Any]:
     try:
-        with open(file_path, mode="rb") as toml_file:
+        with file_path.open(mode="rb") as toml_file:
             return load(toml_file)
     except (FileNotFoundError, TOMLDecodeError):
         return {}

@@ -23,7 +23,7 @@ def has_expected_tables() -> bool:
 
 def read_script_columns(table: TableName) -> set[str]:
     script_path = SQL_SCRIPTS_DIR / f"create_{table}.sql"
-    with open(script_path) as sql_file:
+    with script_path.open() as sql_file:
         lines = [line for line in sql_file if line.startswith(" ")]
     script_columns = {line.lstrip().split(" ")[0] for line in lines}
     logger.debug(f"Script columns for {table} table: {script_columns}")

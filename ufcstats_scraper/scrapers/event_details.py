@@ -1,7 +1,6 @@
 import sys
 from argparse import ArgumentParser
 from json import dump
-from os import mkdir
 from sqlite3 import Error as SqliteError
 from time import sleep
 from typing import Any, get_args
@@ -152,14 +151,14 @@ class EventDetailsScraper:
             raise NoScrapedDataError
 
         try:
-            mkdir(EventDetailsScraper.DATA_DIR, mode=0o755)
+            EventDetailsScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
             logger.info(f"Directory {EventDetailsScraper.DATA_DIR} already exists")
 
         out_data = self.scraped_data.model_dump(by_alias=True, exclude_none=True)
         file_name = self.link.split("/")[-1]
         out_file = EventDetailsScraper.DATA_DIR / f"{file_name}.json"
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
         self.success = True

@@ -1,7 +1,6 @@
 import sys
 from argparse import ArgumentParser
 from json import dump
-from os import mkdir
 from sqlite3 import Error as SqliteError
 from string import ascii_lowercase
 from time import sleep
@@ -181,13 +180,13 @@ class FightersListScraper:
             raise NoScrapedDataError
 
         try:
-            mkdir(FightersListScraper.DATA_DIR, mode=0o755)
+            FightersListScraper.DATA_DIR.mkdir(mode=0o755)
         except FileExistsError:
             logger.info(f"Directory {FightersListScraper.DATA_DIR} already exists")
 
         out_data = [fighter.model_dump(by_alias=True, exclude_none=True) for fighter in self.scraped_data]
         out_file = FightersListScraper.DATA_DIR / f"{self.letter}.json"
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
 
         self.success = True
@@ -286,7 +285,7 @@ def scrape_fighters_list(delay: PositiveFloat = config.default_delay) -> None:
     out_file = FightersListScraper.DATA_DIR / "combined.json"
 
     try:
-        with open(out_file, mode="w") as json_file:
+        with out_file.open(mode="w") as json_file:
             dump(out_data, json_file, indent=2)
         console.success("Done!")
     except OSError:

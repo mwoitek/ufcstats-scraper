@@ -22,7 +22,7 @@ class DBCreator:
     @staticmethod
     def read_sql_script(script_name: str) -> str:
         script_path = SQL_SCRIPTS_DIR / script_name
-        with open(script_path) as sql_file:
+        with script_path.open() as sql_file:
             return sql_file.read().rstrip()
 
     def create_table(self, table: TableName) -> None:
