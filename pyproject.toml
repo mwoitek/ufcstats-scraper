@@ -11,6 +11,7 @@ unsafe-fixes = false
 
 [tool.ruff.lint]
 select = [
+  "A",
   "C401",
   "C417",
   "E741",

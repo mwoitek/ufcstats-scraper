@@ -90,7 +90,7 @@ class Result(CustomModel):
     fighter_1: ResultType
     fighter_2: ResultType
 
-    @field_validator("fighter_1", "fighter_2", mode="wrap")  # pyright: ignore
+    @field_validator("fighter_1", "fighter_2", mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     @classmethod
     def fill_result(cls, raw_result: str, handler: ValidatorFunctionWrapHandler) -> ResultType:
         raw_result = raw_result.strip()
@@ -127,7 +127,7 @@ class Scorecard(CustomModel):
     fighter_1: PositiveInt
     fighter_2: PositiveInt
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def parse_score(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
@@ -154,9 +154,9 @@ class Box(CustomModel):
     details: str | None = None
     scorecards: list[Scorecard] | None = None
 
-    _convert_time = field_validator("time", mode="wrap")(convert_time)  # pyright: ignore
+    _convert_time = field_validator("time", mode="wrap")(convert_time)  # pyright: ignore [reportGeneralTypeIssues]
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def parse_description(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
@@ -168,7 +168,7 @@ class Box(CustomModel):
         self["weight_class"] = "Open Weight" if match is None else match.group(0).title()
         return handler(self)
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def parse_details(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
@@ -188,7 +188,7 @@ class Box(CustomModel):
             self["scorecards"] = [Scorecard.model_validate({"score_str": match}) for match in matches]
         return handler(self)
 
-    @field_validator("bonuses", mode="wrap")  # pyright: ignore
+    @field_validator("bonuses", mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     @classmethod
     def fill_bonuses(
         cls,
@@ -227,7 +227,7 @@ class Count(CustomModel):
     landed: NonNegativeInt
     attempted: NonNegativeInt
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def parse_count(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
@@ -264,9 +264,9 @@ class FighterTotals(CustomModel):
     control_time: CustomTimeDelta | None = None
 
     _fill_ratio = field_validator("significant_strikes_percentage", "takedowns_percentage", mode="wrap")(
-        fill_ratio  # pyright: ignore
+        fill_ratio  # pyright: ignore [reportGeneralTypeIssues]
     )
-    _convert_time = field_validator("control_time", mode="wrap")(convert_time)  # pyright: ignore
+    _convert_time = field_validator("control_time", mode="wrap")(convert_time)  # pyright: ignore [reportGeneralTypeIssues]
 
     @model_validator(mode="after")
     def check_percentages(self) -> Self:
@@ -319,7 +319,7 @@ class FighterSignificantStrikes(CustomModel):
     clinch: Count
     ground: Count
 
-    _fill_ratio = field_validator("percentage", mode="wrap")(fill_ratio)  # pyright: ignore
+    _fill_ratio = field_validator("percentage", mode="wrap")(fill_ratio)  # pyright: ignore [reportGeneralTypeIssues]
 
     @model_validator(mode="after")
     def check_totals(self) -> Self:
@@ -414,14 +414,14 @@ class FightDetailsScraper:
 
     def __init__(
         self,
-        id: int,
+        id_: int,
         link: str,
         event_name: str,
         fighter_1_name: str,
         fighter_2_name: str,
         db: LinksDB,
     ) -> None:
-        self.id = id
+        self.id = id_
         self.link = link
         self.event_name = event_name
         self.fighter_1_name = fighter_1_name
@@ -694,7 +694,7 @@ class FightDetailsScraper:
         if not self.tried:
             logger.info("Fight was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("fight", id=self.id, tried=self.tried, success=self.success)
+        self.db.update_status("fight", id_=self.id, tried=self.tried, success=self.success)
 
 
 def check_links_db() -> bool:

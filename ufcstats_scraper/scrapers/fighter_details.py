@@ -65,7 +65,7 @@ class Header(CustomModel):
     draws: NonNegativeInt
     no_contests: NonNegativeInt
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def fill_record(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         if not isinstance(self, dict):
             return self
@@ -88,11 +88,11 @@ class PersonalInfo(CustomModel):
     stance: Stance | None = None
     date_of_birth: CustomDate | None = None
 
-    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore
-    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore
-    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore
+    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore [reportGeneralTypeIssues]
+    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore [reportGeneralTypeIssues]
+    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore [reportGeneralTypeIssues]
 
-    @field_validator("date_of_birth", mode="wrap")  # pyright: ignore
+    @field_validator("date_of_birth", mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     @classmethod
     def convert_date_of_birth(
         cls,
@@ -115,7 +115,7 @@ class CareerStats(CustomModel):
     td_def: PercRatio
     sub_avg: NonNegativeFloat
 
-    _fill_ratio = field_validator("str_acc", "str_def", "td_acc", "td_def", mode="wrap")(fill_ratio)  # pyright: ignore
+    _fill_ratio = field_validator("str_acc", "str_def", "td_acc", "td_def", mode="wrap")(fill_ratio)  # pyright: ignore [reportGeneralTypeIssues]
 
 
 class Fighter(CustomModel):
@@ -168,8 +168,8 @@ class Fighter(CustomModel):
 class FighterDetailsScraper:
     DATA_DIR = config.data_dir / "fighter_details"
 
-    def __init__(self, id: int, link: str, name: str, db: LinksDB) -> None:
-        self.id = id
+    def __init__(self, id_: int, link: str, name: str, db: LinksDB) -> None:
+        self.id = id_
         self.link = link
         self.name = name
         self.db = db
@@ -312,7 +312,7 @@ class FighterDetailsScraper:
         if not self.tried:
             logger.info("Fighter was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("fighter", id=self.id, tried=self.tried, success=self.success)
+        self.db.update_status("fighter", id_=self.id, tried=self.tried, success=self.success)
 
 
 def check_links_db() -> bool:

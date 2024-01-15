@@ -213,12 +213,12 @@ class LinksDB:
         logger.info("Read %d fights from DB", len(fights))
         return fights
 
-    def update_status(self, table: TableName, *, id: int, tried: bool, success: bool | None) -> None:
+    def update_status(self, table: TableName, *, id_: int, tried: bool, success: bool | None) -> None:
         query = (
             f"UPDATE {table} SET updated_at = :updated_at, tried = :tried, success = :success "
             "WHERE id = :id"
         )
-        params = {"id": id, "updated_at": datetime.now(), "tried": tried, "success": success}
+        params = {"id": id_, "updated_at": datetime.now(), "tried": tried, "success": success}
         self.cur.execute(query, params)
         logger.info("Update %s table", table)
         logger.debug("New status: %s", params)
@@ -256,8 +256,8 @@ class LinksDB:
 
     def update_fighters_status(self, fighter_ids: dict["EventFighter", int]) -> None:
         logger.info("Got %d fighters to update", len(fighter_ids))
-        for id in fighter_ids.values():
-            self.update_status("fighter", id=id, tried=False, success=None)
+        for fighter_id in fighter_ids.values():
+            self.update_status("fighter", id_=fighter_id, tried=False, success=None)
 
     def update_fight_data(self, event: "EventDetails") -> None:
         new_fights, fighter_ids = self.filter_fight_data(event.fights)

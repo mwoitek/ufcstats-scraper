@@ -56,8 +56,8 @@ class Event(CustomModel):
 class EventDetailsScraper:
     DATA_DIR = config.data_dir / "event_details"
 
-    def __init__(self, id: int, link: str, name: str, db: LinksDB) -> None:
-        self.id = id
+    def __init__(self, id_: int, link: str, name: str, db: LinksDB) -> None:
+        self.id = id_
         self.link = link
         self.name = name
         self.db = db
@@ -171,7 +171,7 @@ class EventDetailsScraper:
         if not self.tried:
             logger.info("Event was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("event", id=self.id, tried=self.tried, success=self.success)
+        self.db.update_status("event", id_=self.id, tried=self.tried, success=self.success)
 
     def db_update_fight_data(self) -> None:
         if self.success:

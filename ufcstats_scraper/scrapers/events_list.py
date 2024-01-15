@@ -36,7 +36,7 @@ class Location(CustomModel):
     state: str | None = None
     country: str
 
-    @model_validator(mode="wrap")  # pyright: ignore
+    @model_validator(mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     def get_location_parts(self, handler: Callable[[dict[str, Any]], Self]) -> Self:
         assert isinstance(self, dict)
 
@@ -56,7 +56,7 @@ class Event(CustomModel):
     date: CustomDate
     location: Location
 
-    @field_validator("date", mode="wrap")  # pyright: ignore
+    @field_validator("date", mode="wrap")  # pyright: ignore [reportGeneralTypeIssues]
     @classmethod
     def convert_date(cls, date: str, handler: ValidatorFunctionWrapHandler) -> datetime.date:
         converted = datetime.datetime.strptime(date.strip(), "%B %d, %Y").date()

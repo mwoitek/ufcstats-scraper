@@ -54,9 +54,9 @@ class Fighter(CustomModel):
     draws: NonNegativeInt
     current_champion: bool = False
 
-    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore
-    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore
-    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore
+    _fill_height = field_validator("height", mode="wrap")(fill_height)  # pyright: ignore [reportGeneralTypeIssues]
+    _fill_weight = field_validator("weight", mode="wrap")(fill_weight)  # pyright: ignore [reportGeneralTypeIssues]
+    _fill_reach = field_validator("reach", mode="wrap")(fill_reach)  # pyright: ignore [reportGeneralTypeIssues]
 
     @property
     def name(self) -> str:

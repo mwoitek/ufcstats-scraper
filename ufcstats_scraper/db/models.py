@@ -2,19 +2,19 @@ from typing import NamedTuple
 
 
 class DBEvent(NamedTuple):
-    id: int
+    id_: int
     link: str
     name: str
 
 
 class DBFighter(NamedTuple):
-    id: int
+    id_: int
     link: str
     name: str
 
 
 class DBFight(NamedTuple):
-    id: int
+    id_: int
     link: str
     event_name: str
     fighter_1_name: str
