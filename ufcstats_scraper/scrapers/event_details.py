@@ -155,7 +155,7 @@ class EventDetailsScraper:
             raise NoScrapedDataError
 
         try:
-            EventDetailsScraper.DATA_DIR.mkdir(mode=0o755)
+            EventDetailsScraper.DATA_DIR.mkdir(mode=0o755, parents=True)
         except FileExistsError:
             logger.info("Directory %s already exists", EventDetailsScraper.DATA_DIR)
 

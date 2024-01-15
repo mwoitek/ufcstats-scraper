@@ -185,7 +185,7 @@ class FightersListScraper:
             raise NoScrapedDataError
 
         try:
-            FightersListScraper.DATA_DIR.mkdir(mode=0o755)
+            FightersListScraper.DATA_DIR.mkdir(mode=0o755, parents=True)
         except FileExistsError:
             logger.info("Directory %s already exists", FightersListScraper.DATA_DIR)
 

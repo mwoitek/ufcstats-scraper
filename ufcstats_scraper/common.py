@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 from pydantic import BaseModel, ConfigDict
@@ -75,6 +76,9 @@ class CustomLogger:
             self.handler = logging.NullHandler()
             self.logger.addHandler(self.handler)
             return
+
+        with contextlib.suppress(FileExistsError):
+            config.log_dir.mkdir(mode=0o755, parents=True)
 
         if file_name is None:
             file_name = name
