@@ -57,7 +57,7 @@ class DBCreator:
 
 
 @validate_call
-def setup_db(reset: bool = False) -> None:
+def setup_db(*, reset: bool = False) -> None:
     console.title("LINKS DB SETUP")
     creator = DBCreator()
 
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     console.quiet = args.quiet
     try:
-        setup_db(args.reset)
+        setup_db(reset=args.reset)
     except (FileNotFoundError, ValidationError, sqlite3.Error):
         console.quiet = False
         console.print_exception()

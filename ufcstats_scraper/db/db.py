@@ -102,6 +102,7 @@ class LinksDB:
 
     @staticmethod
     def build_read_query(
+        *,
         table: TableName,
         extra_cols: str | list[str],
         select: LinkSelection = default_select,
@@ -212,7 +213,7 @@ class LinksDB:
         logger.info("Read %d fights from DB", len(fights))
         return fights
 
-    def update_status(self, table: TableName, id: int, tried: bool, success: bool | None) -> None:
+    def update_status(self, table: TableName, *, id: int, tried: bool, success: bool | None) -> None:
         query = (
             f"UPDATE {table} SET updated_at = :updated_at, tried = :tried, success = :success "
             "WHERE id = :id"
@@ -256,7 +257,7 @@ class LinksDB:
     def update_fighters_status(self, fighter_ids: dict["EventFighter", int]) -> None:
         logger.info("Got %d fighters to update", len(fighter_ids))
         for id in fighter_ids.values():
-            self.update_status("fighter", id, False, None)
+            self.update_status("fighter", id=id, tried=False, success=None)
 
     def update_fight_data(self, event: "EventDetails") -> None:
         new_fights, fighter_ids = self.filter_fight_data(event.fights)

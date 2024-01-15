@@ -144,7 +144,7 @@ class Fighter(CustomModel):
             return None
         return career_stats
 
-    def to_dict(self, redundant: bool = True) -> dict[str, Any]:
+    def to_dict(self, *, redundant: bool = True) -> dict[str, Any]:
         flat_dict: dict[str, Any] = {}
 
         orig_dict = self.model_dump(by_alias=True, exclude_none=True)
@@ -291,7 +291,7 @@ class FighterDetailsScraper:
 
         return self.scraped_data
 
-    def save_json(self, redundant: bool = True) -> None:
+    def save_json(self, *, redundant: bool = True) -> None:
         if not hasattr(self, "scraped_data"):
             raise NoScrapedDataError
 
@@ -312,7 +312,7 @@ class FighterDetailsScraper:
         if not self.tried:
             logger.info("Fighter was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("fighter", self.id, self.tried, self.success)
+        self.db.update_status("fighter", id=self.id, tried=self.tried, success=self.success)
 
 
 def check_links_db() -> bool:

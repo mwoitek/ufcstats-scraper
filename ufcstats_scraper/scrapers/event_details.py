@@ -171,7 +171,7 @@ class EventDetailsScraper:
         if not self.tried:
             logger.info("Event was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("event", self.id, self.tried, self.success)
+        self.db.update_status("event", id=self.id, tried=self.tried, success=self.success)
 
     def db_update_fight_data(self) -> None:
         if self.success:

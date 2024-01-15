@@ -694,7 +694,7 @@ class FightDetailsScraper:
         if not self.tried:
             logger.info("Fight was not updated since no attempt was made to scrape data")
             return
-        self.db.update_status("fight", self.id, self.tried, self.success)
+        self.db.update_status("fight", id=self.id, tried=self.tried, success=self.success)
 
 
 def check_links_db() -> bool:

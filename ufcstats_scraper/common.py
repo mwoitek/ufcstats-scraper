@@ -41,7 +41,7 @@ class CustomConsole:
     def success(self, text: str) -> None:
         self.console.print(text, style="success", justify="center", highlight=False)
 
-    def _set_quiet(self, quiet: bool) -> None:
+    def _set_quiet(self, quiet: bool) -> None:  # noqa: FBT001
         self.console.quiet = quiet
 
     quiet = property(fset=_set_quiet)
