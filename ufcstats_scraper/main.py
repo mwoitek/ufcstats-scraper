@@ -9,9 +9,11 @@ from ufcstats_scraper import config
 from ufcstats_scraper.common import custom_console as console
 from ufcstats_scraper.db.common import LinkSelection
 from ufcstats_scraper.db.exceptions import DBNotSetupError
+from ufcstats_scraper.db.setup import setup_db
 from ufcstats_scraper.scrapers.event_details import scrape_event_details
 from ufcstats_scraper.scrapers.events_list import scrape_events_list
 from ufcstats_scraper.scrapers.exceptions import ScraperError
+from ufcstats_scraper.scrapers.fight_details import scrape_fight_details
 from ufcstats_scraper.scrapers.fighter_details import scrape_fighter_details
 from ufcstats_scraper.scrapers.fighters_list import scrape_fighters_list
 
@@ -28,6 +30,21 @@ main_parser.add_argument(
     help="suppress output",
 )
 subparsers = main_parser.add_subparsers(title="subcommands", required=True)
+
+
+# db-setup subcommand
+def db_setup(args: argparse.Namespace) -> None:
+    console.quiet = args.quiet
+    setup_db(reset=args.reset)
+
+
+parser_db_setup = subparsers.add_parser(
+    "db-setup",
+    description="Subcommand for setting up the links database",
+    help="set up links database",
+)
+parser_db_setup.add_argument("-r", "--reset", action="store_true", dest="reset", help="reset links database")
+parser_db_setup.set_defaults(func=db_setup)
 
 
 # events-list subcommand
@@ -125,11 +142,27 @@ parser_fighter_details = subparsers.add_parser(
 )
 parser_fighter_details.set_defaults(func=fighter_details)
 
+
+# fight-details subcommand
+def fight_details(args: argparse.Namespace) -> None:
+    limit = args.limit if args.limit > 0 else None
+    console.quiet = args.quiet
+    scrape_fight_details(args.select, limit, args.delay)
+
+
+parser_fight_details = subparsers.add_parser(
+    "fight-details",
+    parents=[parser_details],
+    description="Subcommand for scraping fight details",
+    help="scrape fight details",
+)
+parser_fight_details.set_defaults(func=fight_details)
+
 # Parse arguments and run subcommand
 args = main_parser.parse_args()
 try:
     args.func(args)
-except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError, ValueError):
+except (DBNotSetupError, OSError, ScraperError, SqliteError, ValidationError):
     console.quiet = False
     console.print_exception()
     sys.exit(1)
