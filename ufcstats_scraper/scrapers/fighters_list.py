@@ -88,7 +88,12 @@ class FightersListScraper:
     def get_soup(self) -> BeautifulSoup:
         params = {"char": self.letter, "page": "all"}
         try:
-            response = requests.get(FightersListScraper.BASE_URL, params=params)
+            response = requests.get(
+                FightersListScraper.BASE_URL,
+                params=params,
+                headers={"User-Agent": config.requests_user_agent},
+                timeout=config.requests_timeout,
+            )
         except RequestException as exc:
             msg = f"{FightersListScraper.BASE_URL}?{urlencode(params)}"
             raise NoSoupError(msg) from exc

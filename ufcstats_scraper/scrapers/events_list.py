@@ -73,7 +73,12 @@ class EventsListScraper:
 
     def get_soup(self) -> BeautifulSoup:
         try:
-            response = requests.get(EventsListScraper.BASE_URL, params={"page": "all"})
+            response = requests.get(
+                EventsListScraper.BASE_URL,
+                params={"page": "all"},
+                headers={"User-Agent": config.requests_user_agent},
+                timeout=config.requests_timeout,
+            )
         except RequestException as exc:
             raise NoSoupError(EventsListScraper.BASE_URL) from exc
 

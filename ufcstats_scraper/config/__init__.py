@@ -4,6 +4,7 @@ from typing import Any, Literal, cast
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     PositiveFloat,
     ValidationError,
     ValidationInfo,
@@ -46,10 +47,23 @@ class Logger(BaseModel):
     _invalid_to_default = field_validator("*", mode="wrap")(invalid_to_default)
 
 
+class Requests(BaseModel):
+    model_config = ConfigDict(str_min_length=1, str_strip_whitespace=True)
+
+    timeout: PositiveFloat = 5.0
+    user_agent: str = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+        "(KHTML, like Gecko) Version/16.6 Safari/605.1.1"
+    )
+
+    _invalid_to_default = field_validator("*", mode="wrap")(invalid_to_default)
+
+
 class Config(BaseModel):
     defaults: Defaults = Defaults()
     directories: Directories = Directories()
     logger: Logger = Logger()
+    requests: Requests = Requests()
 
 
 def read_toml(file_path: Path) -> dict[str, Any]:
@@ -76,3 +90,7 @@ log_dir = _config.directories.log
 logger_enabled = _config.logger.enabled
 logger_level = _config.logger.level
 logger_single_file = _config.logger.single_file
+
+# Requests
+requests_timeout = _config.requests.timeout
+requests_user_agent = _config.requests.user_agent

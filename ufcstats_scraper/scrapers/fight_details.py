@@ -432,7 +432,11 @@ class FightDetailsScraper:
 
     def get_soup(self) -> BeautifulSoup:
         try:
-            response = requests.get(self.link)
+            response = requests.get(
+                self.link,
+                headers={"User-Agent": config.requests_user_agent},
+                timeout=config.requests_timeout,
+            )
         except RequestException as exc:
             raise NoSoupError(self.link) from exc
 
