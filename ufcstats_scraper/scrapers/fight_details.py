@@ -529,11 +529,13 @@ class FightDetailsScraper:
         # Process "Totals" tables
         cells_1: ResultSet[Tag] = table_bodies[0].find_all("td")
         num_cells_1 = len(cells_1)
-        assert num_cells_1 > 0 and num_cells_1 % 10 == 0, f"invalid number of cells: {num_cells_1}"
+        assert num_cells_1 > 0, "found no cell"
+        assert num_cells_1 % 10 == 0, f"invalid number of cells: {num_cells_1}"
 
         cells_2: ResultSet[Tag] = table_bodies[1].find_all("td")
         num_cells_2 = len(cells_2)
-        assert num_cells_2 > 0 and num_cells_2 % 10 == 0, f"invalid number of cells: {num_cells_2}"
+        assert num_cells_2 > 0, "found no cell"
+        assert num_cells_2 % 10 == 0, f"invalid number of cells: {num_cells_2}"
 
         totals_tables: RawTableType = []
         idxs = [3, 6, 9, 2, 4, 5, 1, 7, 8]
@@ -547,11 +549,13 @@ class FightDetailsScraper:
         # Process "Significant Strikes" tables
         cells_3: ResultSet[Tag] = table_bodies[2].find_all("td")
         num_cells_3 = len(cells_3)
-        assert num_cells_3 > 0 and num_cells_3 % 9 == 0, f"invalid number of cells: {num_cells_3}"
+        assert num_cells_3 > 0, "found no cell"
+        assert num_cells_3 % 9 == 0, f"invalid number of cells: {num_cells_3}"
 
         cells_4: ResultSet[Tag] = table_bodies[3].find_all("td")
         num_cells_4 = len(cells_4)
-        assert num_cells_4 > 0 and num_cells_4 % 9 == 0, f"invalid number of cells: {num_cells_4}"
+        assert num_cells_4 > 0, "found no cell"
+        assert num_cells_4 % 9 == 0, f"invalid number of cells: {num_cells_4}"
 
         strikes_tables: RawTableType = []
         for cells in chunked(chain(cells_3, cells_4), n=9):

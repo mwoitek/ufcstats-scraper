@@ -73,7 +73,7 @@ class LinksDB:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc: object) -> bool:  # noqa: F841
+    def __exit__(self, *exc: object) -> bool:
         self.close()
         return False
 
